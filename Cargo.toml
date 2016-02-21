@@ -10,8 +10,6 @@ license = "ISC"
 readme = "README.md"
 
 [dependencies]
-regex = "0.1"
-lazy_static = "0.1"
 time = "0.1"
 # this should be a dev dependency, but there's some kind of issue with
 # dev-only macro crates

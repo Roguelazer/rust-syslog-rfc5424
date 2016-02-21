@@ -23,4 +23,9 @@ fn main() {
     timeit!({
         parse_message(large_message).unwrap();
     });
+    println!("Parsing an average message:");
+    let average_message = r#"<29>1 2016-02-21T04:32:57+00:00 web1 someservice - - [origin x-service="someservice"][meta sequenceId="14125553"] 127.0.0.1 - - 1456029177 "GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575"#;
+    timeit!({
+        parse_message(average_message).unwrap();
+    });
 }
