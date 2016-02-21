@@ -1,0 +1,13 @@
+[package]
+name = "syslog_rfc5424"
+version = "0.1.0"
+authors = ["James Brown <jbrown@easypost.com>"]
+
+[dependencies]
+regex = "0.1"
+lazy_static = "0.1"
+time = "0.1"
+assert_matches = "1.0"
+
+[dev-dependencies]
+timeit = "*"
