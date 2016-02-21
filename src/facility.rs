@@ -1,5 +1,7 @@
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
+/// Syslog facilities. Taken From RFC 5424, but I've heard that some platforms mix these around.
+/// Names are from Linux.
 pub enum SyslogFacility {
     LOG_KERN = 0,
     LOG_USER = 1,
@@ -28,6 +30,7 @@ pub enum SyslogFacility {
 }
 
 impl SyslogFacility {
+    /// Convert an int (as used in the wire serialization) into a SyslogFacility
     pub fn from_int(i: i32) -> Option<SyslogFacility> {
         match i {
             0 => Some(SyslogFacility::LOG_KERN),

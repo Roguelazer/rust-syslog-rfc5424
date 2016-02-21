@@ -1,3 +1,5 @@
+//! In-memory representation of a single Syslog message.
+
 use std::string::String;
 use std::collections::BTreeMap;
 use std::convert::Into;

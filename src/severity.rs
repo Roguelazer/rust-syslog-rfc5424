@@ -1,5 +1,6 @@
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
+/// Syslog Severities from RFC 5424.
 pub enum SyslogSeverity {
     SEV_EMERG = 0,
     SEV_ALERT = 1,
@@ -12,6 +13,10 @@ pub enum SyslogSeverity {
 }
 
 impl SyslogSeverity {
+    /// Convert an int (as used in the wire serialization) into a SyslogFacility
+    ///
+    /// Returns an Option, but the wire protocol will only include 0..7, so should
+    /// never return None in practical usage.
     pub fn from_int(i: i32) -> Option<SyslogSeverity> {
         match i {
             0 => Some(SyslogSeverity::SEV_EMERG),

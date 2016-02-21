@@ -94,7 +94,8 @@ fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
             escaped = false
         } else {
             if chr == '\\' {
-                escaped = true
+                escaped = true;
+                continue;
             }
             if chr == '"' {
                 return Ok((result, &input[(idx + 2)..]));
@@ -188,7 +189,7 @@ pub fn parse_message<S> (s: S) -> Result<SyslogMessage, ParseErr>
         \x20
         (?P<msgid>-|(?:\S{1,32}))
         \x20
-        (?P<sd>-|(?: \[ [^\x20\]"]{1,32} (?: \x20 [^=\x20\]]{1,32} = "[^"]+")*\])+)
+        (?P<sd>-|(?: \[ [^\x20\]"]{1,32} (?: \x20 [^=\x20\]]{1,32} = "([^"\\]|\\.)*" )*\])+)
         \x20?
         (?P<message>.*)$
         "#).unwrap();
@@ -234,12 +235,10 @@ pub fn parse_message<S> (s: S) -> Result<SyslogMessage, ParseErr>
                     };
                     let hours = try!(i32::from_str(&rest[0..2]).map_err(ParseErr::IntConversionErr));
                     let minutes = try!(i32::from_str(&rest[3..5]).map_err(ParseErr::IntConversionErr));
-                    println!("hours:{:?}, minutes:{:?}, sign:{:?}", hours, minutes, sign);
                     minutes + hours * 60 * sign
                 }
             };
             tm = tm + time::Duration::minutes(utc_offset_mins as i64);
-            println!("offset={:?}", tm.tm_utcoff);
             tm.tm_isdst = -1;
             Some(tm.to_utc().to_timespec().sec)
         }
@@ -346,9 +345,16 @@ mod tests {
     }
 
     #[test]
+    fn test_sd_with_escaped_quote() {
+        let msg_text = r#"<1>1 - - - - - [meta key="val\"ue"] message"#;
+        let msg = parse_message(msg_text).expect("should parse");
+        assert_eq!(msg.sd.elements[0].params[0].param_value, "val\"ue");
+    }
+
+    #[test]
     fn test_other_message() { 
         let msg_text = r#"<190>1 2016-02-21T01:19:11+00:00 batch6sj - - - [meta sequenceId="21881798" x-group="37051387"][origin x-service="tracking"] metascutellar conversationalist nephralgic exogenetic graphy streng outtaken acouasm amateurism prenotice Lyonese bedull antigrammatical diosphenol gastriloquial bayoneteer sweetener naggy roughhouser dighter addend sulphacid uneffectless ferroprussiate reveal Mazdaist plaudite Australasian distributival wiseman rumness Seidel topazine shahdom sinsion mesmerically pinguedinous ophthalmotonometer scuppler wound eciliate expectedly carriwitchet dictatorialism bindweb pyelitic idic atule kokoon poultryproof rusticial seedlip nitrosate splenadenoma holobenthic uneternal Phocaean epigenic doubtlessly indirection torticollar robomb adoptedly outspeak wappenschawing talalgia Goop domitic savola unstrafed carded unmagnified mythologically orchester obliteration imperialine undisobeyed galvanoplastical cycloplegia quinquennia foremean umbonal marcgraviaceous happenstance theoretical necropoles wayworn Igbira pseudoangelic raising unfrounced lamasary centaurial Japanolatry microlepidoptera"#;
-        let msg = parse_message(msg_text).expect("should parse as text");
+        parse_message(msg_text).expect("should parse as text");
     }
 
     #[test]
