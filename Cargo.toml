@@ -1,12 +1,20 @@
 [package]
 name = "syslog_rfc5424"
 version = "0.1.0"
-authors = ["James Brown <jbrown@easypost.com>"]
+authors = ["James Brown <roguelazer@roguelazer.com>"]
+description = "Parser for RFC5424 (IETF-format) syslog messages"
+documentation = "http://roguelazer.github.io/rust-syslog-rfc5424/syslog_rfc5424/"
+homepage = "https://github.com/Roguelazer/rust-syslog-rfc5424"
+repository = "https://github.com/Roguelazer/rust-syslog-rfc5424"
+license = "ISC"
+readme = "README.md"
 
 [dependencies]
 regex = "0.1"
 lazy_static = "0.1"
 time = "0.1"
+# this should be a dev dependency, but there's some kind of issue with
+# dev-only macro crates
 assert_matches = "1.0"
 
 [dev-dependencies]
