@@ -31,8 +31,6 @@
 //!    so I'm just not supporting that. Most "real" syslog servers barf on it anway.
 //!
 #[macro_use] extern crate assert_matches;
-#[macro_use] extern crate lazy_static;
-extern crate regex;
 extern crate time;
 
 pub mod message;

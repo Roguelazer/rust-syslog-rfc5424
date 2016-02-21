@@ -6,6 +6,9 @@ This module implements an [RFC 5424](https://tools.ietf.org/html/rfc5424) IETF S
 
 ## Performance
 
-On a recent system, a release build takes approximately 7µs to parse a message without significant complexity, and approximately 37µs to parse a complicated message. In debug mode, those times are about 25x worse. A production server therefore should be able to parse at least 25k messages per second per thread.
+On a recent system[^sys], a release build takes approximately 8µs to parse an average message and approximately 300ns to parse the smallest legal message. Debug timings are a bit worse -- about 60µs for an average message and about 8µs for the minimal message. A single-threaded Syslog server should be able to parse at least 100,000 messages/s, as long as you run a separate thread for the parser.
 
-This compares very favorably to the 700µs/message for the [python syslog-rfc5424-parser](https://github.com/EasyPost/syslog-rfc5424-parser) module which I also wrote.
+This compares *very* favorably to [python syslog-rfc5424-parser](https://github.com/EasyPost/syslog-rfc5424-parser)[^f1], which takes about 300µs for a minimal message, and more than 700µs for an average message.
+
+[^sys]: An Intel i7-4850HQ in a 2013 rMBP
+[^f1]: Which I also wrote

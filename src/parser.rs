@@ -1,37 +1,41 @@
-// It'd be great to use a real parser here. unfortunately, rust-peg doesn't work on any
-// stable releases, and lalrpop can't hangle un-tokenizable grammars like this one. so we
-// are instead going to use a regexp to pull out the parts that are regular and then a hand-coded
-// parser for the rest. Hurray. :-/
-
 use std::str::FromStr;
 use std::num;
-use std::char;
+use std::string;
 
 use time;
 
 
-use regex::Regex;
-
 use severity;
 use facility;
-use message::{SyslogMessage,ProcIdType,StructuredData,StructuredDataElement,StructuredDataParam};
+use message::{time_t,SyslogMessage,ProcIdType,StructuredData,StructuredDataElement,StructuredDataParam};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum ParseErr {
     RegexDoesNotMatchErr,
     BadSeverityInPri,
     BadFacilityInPri,
     UnexpectedEndOfInput,
+    TooFewDigits,
+    TooManyDigits,
+    InvalidUTCOffset,
+    UnicodeError(string::FromUtf8Error),
     ExpectedTokenErr(char),
     IntConversionErr(num::ParseIntError),
     MissingField(&'static str)
 }
 
-fn parse_pri(pri: i32) -> Result<(severity::SyslogSeverity, facility::SyslogFacility), ParseErr> {
-    let sev = try!(severity::SyslogSeverity::from_int(pri & 0x7).ok_or(ParseErr::BadSeverityInPri));
-    let fac = try!(facility::SyslogFacility::from_int(pri >> 3).ok_or(ParseErr::BadFacilityInPri));
-    Ok((sev, fac))
-}
+// We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
+// have much other choice:
+//
+//  - Regexp is much slower (at least a factor of 4), and we still end up having to parse the
+//    somewhat-irregular SD
+//  - LALRPOP requires non-ambiguous tokenization
+//  - Rust-PEG doesn't work on anything except nightly
+//
+// So here we are. The macros make it a bit better.
+//
+// General convention is that the parse state is represented by a string slice named "rest"; the
+// macros will update that slice as they consume tokens.
 
 macro_rules! extract_field {
     ($md:expr, $f:expr) => (match $md.name($f) {
@@ -55,19 +59,40 @@ macro_rules! maybe_expect_char {
     })
 }
 
-macro_rules! expect_char {
-    ($s:expr, $e: expr) => (match $s.chars().next() {
-        Some($e) => &$s[1..],
-        _ => { return Err(ParseErr::ExpectedTokenErr($e)); }
-    })
+macro_rules! take_item {
+    ($e:expr, $r:expr) => {{
+        let (t, r) = try!($e);
+        $r = r;
+        t
+    }}
 }
 
-fn take_while<F>(input: &str, f: F) -> (String, Option<&str>)
+
+macro_rules! take_char {
+    ($e: expr, $c:expr) => {{
+        $e = match $e.chars().next() {
+            Some($c) => &$e[1..],
+            Some(_) => {
+                //println!("Error with rest={:?}", $e);
+                return Err(ParseErr::ExpectedTokenErr($c));
+            },
+            None => {
+                //println!("Error with rest={:?}", $e);
+                return Err(ParseErr::UnexpectedEndOfInput);
+            }
+        }
+    }}
+}
+
+fn take_while<F>(input: &str, f: F, max_chars: usize) -> (String, Option<&str>)
     where F: Fn(char) -> bool {
     let mut result = String::new();
 
     for (idx, chr) in input.char_indices() {
         if !f(chr) {
+            return (result, Some(&input[idx..]));
+        }
+        if result.len() == max_chars {
             return (result, Some(&input[idx..]));
         }
         result.push(chr);
@@ -76,7 +101,7 @@ fn take_while<F>(input: &str, f: F) -> (String, Option<&str>)
 }
 
 fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
-    let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']');
+    let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
     Ok((res, match rest {
         Some(s) => s,
         None => { return Err(ParseErr::UnexpectedEndOfInput); }
@@ -84,12 +109,13 @@ fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
 }
 
 fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
-    let rest1 = expect_char!(input, '"');
+    let mut rest = input;
+    take_char!(rest, '"');
     let mut result = String::new();
 
     let mut escaped = false;
 
-    for (idx, chr) in rest1.char_indices() {
+    for (idx, chr) in rest.char_indices() {
         if escaped {
             escaped = false
         } else {
@@ -111,15 +137,16 @@ fn parse_sd_params(input: &str) -> Result<(Vec<StructuredDataParam>, &str), Pars
     let mut params = Vec::new();
     let mut top = input;
     loop {
-        if let Some(rest) = maybe_expect_char!(top, ' ') {
-            let (param_name, rest2) = try!(parse_sd_id(rest));
-            let rest3 = expect_char!(rest2, '=');
-            let (param_value, rest4) = try!(parse_param_value(rest3));
+        if let Some(rest2) = maybe_expect_char!(top, ' ') {
+            let mut rest = rest2;
+            let param_name = take_item!(parse_sd_id(rest), rest);
+            take_char!(rest, '=');
+            let param_value = take_item!(parse_param_value(rest), rest);
             params.push(StructuredDataParam {
                 param_id: String::from(param_name),
                 param_value: String::from(param_value)
             });
-            top = rest4;
+            top = rest;
         } else {
             return Ok((params, top));
         }
@@ -127,28 +154,171 @@ fn parse_sd_params(input: &str) -> Result<(Vec<StructuredDataParam>, &str), Pars
 }
 
 fn parse_sde(sde: &str) -> Result<(StructuredDataElement, &str), ParseErr> {
-    let (id, rest1) = try!(parse_sd_id(expect_char!(sde, '[')));
-    let (params, rest2) = try!(parse_sd_params(rest1));
-    let rest3 = expect_char!(rest2, ']');
+    let mut rest = sde;
+    take_char!(rest, '[');
+    let id = take_item!(parse_sd_id(rest), rest);
+    let params = take_item!(parse_sd_params(rest), rest);
+    take_char!(rest, ']');
     Ok((StructuredDataElement {
         sd_id: id,
         params: params
-    }, rest3))
+    }, rest))
 }
 
-/// SUPER-DINKY recursive-descent parser to parse structured data
-fn parse_sd(structured_data_raw: String) -> Result<StructuredData, ParseErr> {
+fn parse_sd(structured_data_raw: &str) -> Result<(StructuredData, &str), ParseErr> {
     let mut elements = Vec::new();
-    let mut rest = &structured_data_raw[..];
+    if structured_data_raw.chars().next() == Some('-') {
+        return Ok((StructuredData {
+            elements: elements
+        }, &structured_data_raw[1..]))
+    }
+    let mut rest = structured_data_raw;
     loop {
-        let (element, rest2) = try!(parse_sde(rest));
+        let element = take_item!(parse_sde(rest), rest);
         elements.push(element);
-        if rest2.len() == 0 {
-            return Ok(StructuredData { elements: elements });
+        if rest.chars().next() == Some(' ') {
+            return Ok((StructuredData { elements: elements }, rest))
         }
-        rest = rest2;
     }
 }
+
+fn parse_pri_val(pri: i32) -> Result<(severity::SyslogSeverity, facility::SyslogFacility), ParseErr> {
+    let sev = try!(severity::SyslogSeverity::from_int(pri & 0x7).ok_or(ParseErr::BadSeverityInPri));
+    let fac = try!(facility::SyslogFacility::from_int(pri >> 3).ok_or(ParseErr::BadFacilityInPri));
+    Ok((sev, fac))
+}
+
+fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> Result<(i32, &str), ParseErr> {
+    let (res, rest1) = take_while(s, |c| c >= '0' && c <= '9', max_digits);
+    let rest = try!(rest1.ok_or(ParseErr::UnexpectedEndOfInput));
+    if res.len() < min_digits {
+        Err(ParseErr::TooFewDigits)
+    } else if res.len() > max_digits {
+        Err(ParseErr::TooManyDigits)
+    } else {
+        Ok((try!(i32::from_str(&res).map_err(ParseErr::IntConversionErr)), rest))
+    }
+}
+
+fn parse_timestamp(m: &str) -> Result<(Option<time_t>, &str), ParseErr> {
+    let mut rest = m;
+    if rest.chars().next() == Some('-') {
+        return Ok((None, &rest[1..]))
+    }
+    let mut tm = time::empty_tm();
+    tm.tm_year = take_item!(parse_num(rest, 4, 4), rest) - 1900;
+    take_char!(rest, '-');
+    tm.tm_mon = take_item!(parse_num(rest, 2, 2), rest) - 1;
+    take_char!(rest, '-');
+    tm.tm_mday = take_item!(parse_num(rest, 2, 2), rest);
+    take_char!(rest, 'T');
+    tm.tm_hour = take_item!(parse_num(rest, 2, 2), rest);
+    take_char!(rest, ':');
+    tm.tm_min = take_item!(parse_num(rest, 2, 2), rest);
+    take_char!(rest, ':');
+    tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
+    if rest.chars().next() == Some('-') {
+        take_char!(rest, '.');
+        take_item!(parse_num(rest, 1, 6), rest);
+    }
+    // Tm::utcoff is totally broken, don't use it.
+    let utc_offset_mins = match rest.chars().next() {
+        None => 0,
+        Some('Z') => {
+            rest = &rest[1..];
+            0
+        },
+        Some(c) => {
+            let (sign, irest) = match c {
+                '+' => (1, &rest[1..]),
+                '-' => (-1, &rest[1..]),
+                _ => { return Err(ParseErr::InvalidUTCOffset); }
+            };
+            let hours = try!(i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr));
+            let minutes = try!(i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr));
+            rest = &irest[5..];
+            minutes + hours * 60 * sign
+        }
+    };
+    tm = tm + time::Duration::minutes(utc_offset_mins as i64);
+    tm.tm_isdst = -1;
+    Ok((Some(tm.to_utc().to_timespec().sec), rest))
+}
+
+fn parse_term(m: &str, min_length: usize, max_length: usize) -> Result<(Option<String>, &str), ParseErr> {
+    if m.chars().next() == Some('-') {
+        return Ok((None, &m[1..]))
+    }
+    let mut buf = Vec::new();
+    for (idx, chr) in m.as_bytes().iter().enumerate() {
+        //println!("idx={:?}, buf={:?}, chr={:?}", idx, buf, chr);
+        if *chr < 33 || *chr > 126 {
+            if buf.len() < min_length {
+                return Err(ParseErr::TooFewDigits);
+            }
+            return Ok((Some(try!(String::from_utf8(buf).map_err(ParseErr::UnicodeError))), &m[idx..]))
+        }
+        if buf.len() == max_length {
+            return Ok((Some(try!(String::from_utf8(buf).map_err(ParseErr::UnicodeError))), &m[idx..]))
+        }
+        buf.push(*chr);
+    }
+    return Err(ParseErr::UnexpectedEndOfInput)
+}
+
+
+fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
+    let mut rest = m;
+    take_char!(rest, '<');
+    let prival = take_item!(parse_num(rest, 1, 3), rest);
+    take_char!(rest, '>');
+    let (sev, fac) = try!(parse_pri_val(prival));
+    let version = take_item!(parse_num(rest, 1, 2), rest);
+    assert!(version == 1);
+    //println!("got version {:?}, rest={:?}", version, rest);
+    take_char!(rest, ' ');
+    let timestamp = take_item!(parse_timestamp(rest), rest);
+    //println!("got timestamp {:?}, rest={:?}", timestamp, rest);
+    take_char!(rest, ' ');
+    let hostname = take_item!(parse_term(rest, 1, 255), rest);
+    //println!("got hostname {:?}, rest={:?}", hostname, rest);
+    take_char!(rest, ' ');
+    let appname = take_item!(parse_term(rest, 1, 48), rest);
+    //println!("got appname {:?}, rest={:?}", appname, rest);
+    take_char!(rest, ' ');
+    let procid_r = take_item!(parse_term(rest, 1, 128), rest);
+    let procid = match procid_r {
+        None => None,
+        Some(s) => Some(match i32::from_str(&s) {
+            Ok(n) => ProcIdType::PID(n),
+            Err(_) => ProcIdType::Name(s)
+        })
+    };
+    //println!("got procid {:?}, rest={:?}", procid, rest);
+    take_char!(rest, ' ');
+    let msgid = take_item!(parse_term(rest, 1, 32), rest);
+    take_char!(rest, ' ');
+    let sd = take_item!(parse_sd(rest), rest);
+    //println!("got sd {:?}, rest={:?}", sd, rest);
+    rest = match maybe_expect_char!(rest, ' ') {
+        Some(r) => r,
+        None => rest
+    };
+    let msg = String::from(rest);
+
+    Ok(SyslogMessage {
+        severity: sev,
+        facility: fac,
+        timestamp: timestamp,
+        hostname: hostname,
+        application: appname,
+        procid: procid,
+        msgid: msgid,
+        sd: sd,
+        message: msg
+    })
+}
+
 
 
 /// Parse a string into a SyslogMessage object
@@ -173,94 +343,13 @@ fn parse_sd(structured_data_raw: String) -> Result<StructuredData, ParseErr> {
 pub fn parse_message<S> (s: S) -> Result<SyslogMessage, ParseErr> 
     where S: Into<String> {
 
-    lazy_static! {
-        static ref SYSLOG_RE:Regex = Regex::new(r#"(?x)
-        ^
-        <(?P<pri>[0-9]+)>
-        (?P<version>[0-9]+)
-        \x20
-        (?P<timestamp>-|(?:(?P<year>[0-9]{4})-(?P<month>[0-9]{2})-(?P<day>[0-9]{2})T(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})(?P<fracsec>\.[0-9]{1,6})?(?P<offset>Z|(?:[+-]?[0-9]{2}:[0-9]{2}))))
-        \x20
-        (?P<hostname>-|(?:\S{1,255}))
-        \x20
-        (?P<appname>-|(?:\S{1,48}))
-        \x20
-        (?P<procid>-|(?:\S{1,128}))
-        \x20
-        (?P<msgid>-|(?:\S{1,32}))
-        \x20
-        (?P<sd>-|(?: \[ [^\x20\]"]{1,32} (?: \x20 [^=\x20\]]{1,32} = "([^"\\]|\\.)*" )*\])+)
-        \x20?
-        (?P<message>.*)$
-        "#).unwrap();
-        static ref ALL_DIGIT_RE: Regex = Regex::new("^[0-9]+$").unwrap();
-    }
-
-    let s_s = s.into();
-
-    let md = try!(SYSLOG_RE.captures(&s_s).ok_or(ParseErr::RegexDoesNotMatchErr));
-
-    let pri_val = try!(md.name("pri").ok_or(ParseErr::MissingField("pri")));
-    let (sev, fac) = try!(parse_pri(try!(i32::from_str(pri_val).map_err(ParseErr::IntConversionErr))));
-
-    let procid = match extract_field!(md, "procid") {
-        Some(ss) => { match ALL_DIGIT_RE.is_match(&ss) {
-            true => Some(ProcIdType::PID(i32::from_str(&ss).unwrap())),
-            false => Some(ProcIdType::Name(ss))
-        }},
-        None => None,
-    };
-
-    let timestamp = match md.name("timestamp") {
-        Some("-") => None,
-        None => None,
-        Some(_) => {
-            let mut tm = time::empty_tm();
-            tm.tm_year = try_field_as_i32!(md, "year") - 1900;
-            tm.tm_mon = try_field_as_i32!(md, "month") - 1;
-            tm.tm_mday = try_field_as_i32!(md, "day");
-            tm.tm_hour = try_field_as_i32!(md, "hour");
-            tm.tm_min = try_field_as_i32!(md, "minute");
-            tm.tm_sec = try_field_as_i32!(md, "second");
-            // Tm::utcoff is totally broken, don't use it.
-            let utc_offset_mins = match md.name("offset") {
-                None => 0,
-                Some("Z") => 0,
-                Some(other) => {
-                    let front = other[0..1].as_bytes()[0];
-                    let (sign, rest) = match char::from_u32(front as u32) {
-                        Some('+') => (1, &other[1..]),
-                        Some('-') => (-1, &other[1..]),
-                        _ => (1, other)
-                    };
-                    let hours = try!(i32::from_str(&rest[0..2]).map_err(ParseErr::IntConversionErr));
-                    let minutes = try!(i32::from_str(&rest[3..5]).map_err(ParseErr::IntConversionErr));
-                    minutes + hours * 60 * sign
-                }
-            };
-            tm = tm + time::Duration::minutes(utc_offset_mins as i64);
-            tm.tm_isdst = -1;
-            Some(tm.to_utc().to_timespec().sec)
-        }
-    };
-
-    Ok(SyslogMessage {
-        severity: sev,
-        facility: fac,
-        hostname: extract_field!(md, "hostname"),
-        application: extract_field!(md, "appname"),
-        procid: procid,
-        msgid: extract_field!(md, "msgid"),
-        sd: try!(extract_field!(md, "sd").map(parse_sd).unwrap_or(Ok(StructuredData { elements: Vec::new() }))),
-        timestamp: timestamp,
-        message: String::from(md.name("message").unwrap_or(""))
-    })
+    parse_message_s(&s.into())
 }
 
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_message, ParseErr};
+    use super::parse_message;
     use message;
 
     use facility::SyslogFacility;
@@ -281,7 +370,7 @@ mod tests {
 
     #[test]
     fn test_with_time_zulu() {
-        let msg = parse_message("<1>1 2015-01-01T00:00:00Z - - - - -").expect("Should parse empty message");
+        let msg = parse_message("<1>1 2015-01-01T00:00:00Z host - - - -").expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1420070400));
     }
 
@@ -361,7 +450,6 @@ mod tests {
     fn test_bad_pri() {
         let msg = parse_message("<4096>1 - - - - - -");
         assert!(msg.is_err());
-        assert_matches!(msg.unwrap_err(), ParseErr::BadFacilityInPri);
     }
 
     #[test]
@@ -369,6 +457,5 @@ mod tests {
         // we shouldn't be able to parse RFC3164 messages
         let msg = parse_message("<134>Feb 18 20:53:31 haproxy[376]: I am a message");
         assert!(msg.is_err());
-        assert_matches!(msg.unwrap_err(), ParseErr::RegexDoesNotMatchErr);
     }
 }
