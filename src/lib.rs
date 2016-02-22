@@ -20,7 +20,7 @@
 //! loop {
 //!     let (data_read, _) = s.recv_from(&mut buf).unwrap();
 //!     let msg = parse_message(str::from_utf8(&buf[0..data_read]).unwrap()).unwrap();
-//!     println!("{:?} {:?} {:?} {:?}", msg.facility, msg.severity, msg.hostname, msg.message);
+//!     println!("{:?} {:?} {:?} {:?}", msg.facility, msg.severity, msg.hostname, msg.msg);
 //! }
 //! ```
 //!

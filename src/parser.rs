@@ -305,11 +305,11 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
         version: version,
         timestamp: timestamp,
         hostname: hostname,
-        application: appname,
+        appname: appname,
         procid: procid,
         msgid: msgid,
         sd: sd,
-        message: msg
+        msg: msg
     })
 }
 
@@ -356,7 +356,7 @@ mod tests {
         assert!(msg.severity == SyslogSeverity::SEV_ALERT);
         assert!(msg.timestamp.is_none());
         assert!(msg.hostname.is_none());
-        assert!(msg.application.is_none());
+        assert!(msg.appname.is_none());
         assert!(msg.procid.is_none());
         assert!(msg.msgid.is_none());
         assert!(msg.sd.len() == 0);
@@ -386,9 +386,9 @@ mod tests {
         assert_eq!(msg.facility, SyslogFacility::LOG_CRON);
         assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
         assert_eq!(msg.hostname, Some(String::from("host1")));
-        assert_eq!(msg.application, Some(String::from("CROND")));
+        assert_eq!(msg.appname, Some(String::from("CROND")));
         assert_eq!(msg.procid, Some(message::ProcIdType::PID(10391)));
-        assert_eq!(msg.message, String::from("some_message"));
+        assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 1);
         let v = msg.sd.find_tuple("meta", "sequenceId").expect("Should contain meta sequenceId");
@@ -401,9 +401,9 @@ mod tests {
         assert_eq!(msg.facility, SyslogFacility::LOG_CRON);
         assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
         assert_eq!(msg.hostname, Some(String::from("host1")));
-        assert_eq!(msg.application, Some(String::from("CROND")));
+        assert_eq!(msg.appname, Some(String::from("CROND")));
         assert_eq!(msg.procid, Some(message::ProcIdType::PID(10391)));
-        assert_eq!(msg.message, String::from("some_message"));
+        assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 2);
         assert_eq!(msg.sd.find_sdid("meta").expect("should contain meta").len(), 3);

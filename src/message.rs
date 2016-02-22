@@ -118,11 +118,11 @@ pub struct SyslogMessage {
     pub version: i32,
     pub timestamp: Option<time_t>,
     pub hostname: Option<String>,
-    pub application: Option<String>,
+    pub appname: Option<String>,
     pub procid: Option<ProcIdType>,
     pub msgid: Option<msgid_t>,
     pub sd: StructuredData,
-    pub message: String,
+    pub msg: String,
 }
 
 
@@ -160,17 +160,17 @@ mod tests {
             version: 1,
             timestamp: None,
             hostname: None,
-            application: None,
+            appname: None,
             procid: None,
             msgid: None,
             sd: StructuredData::new_empty(),
-            message: String::from("")
+            msg: String::from("")
         };
 
         let encoded = json::encode(&m).expect("Should encode to JSON");
         println!("{:?}", encoded);
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
-        assert_eq!(encoded, "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"hostname\":null,\"application\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"message\":\"\"}");
+        assert_eq!(encoded, "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
     }
 }
