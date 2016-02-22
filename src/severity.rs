@@ -1,3 +1,5 @@
+use rustc_serialize::{Encodable,Encoder};
+
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
 /// Syslog Severities from RFC 5424.
@@ -29,5 +31,22 @@ impl SyslogSeverity {
             7 => Some(SyslogSeverity::SEV_DEBUG),
             _ => None,
         }
+    }
+}
+
+
+impl Encodable for SyslogSeverity {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        s.emit_str(match self {
+            &SyslogSeverity::SEV_EMERG => "emerg",
+            &SyslogSeverity::SEV_ALERT => "alert",
+            &SyslogSeverity::SEV_CRIT => "crit",
+            &SyslogSeverity::SEV_ERR => "err",
+            &SyslogSeverity::SEV_WARNING => "warning",
+            &SyslogSeverity::SEV_NOTICE => "notice",
+            &SyslogSeverity::SEV_INFO => "info",
+            &SyslogSeverity::SEV_DEBUG => "debug"
+        })
     }
 }

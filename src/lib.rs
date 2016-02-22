@@ -32,6 +32,7 @@
 //!
 #[macro_use] extern crate assert_matches;
 extern crate time;
+extern crate rustc_serialize;
 
 pub mod message;
 mod severity;

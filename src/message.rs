@@ -4,6 +4,8 @@ use std::string::String;
 use std::collections::BTreeMap;
 use std::convert::Into;
 
+use rustc_serialize::{Encodable,Encoder};
+
 #[allow(non_camel_case_types)]
 pub type time_t = i64;
 #[allow(non_camel_case_types)]
@@ -21,6 +23,16 @@ use facility;
 pub enum ProcIdType {
     PID(pid_t),
     Name(String)
+}
+
+impl Encodable for ProcIdType {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        match *self {
+            ProcIdType::PID(ref p) => s.emit_i32(*p),
+            ProcIdType::Name(ref n) => s.emit_str(n)
+        }
+    }
 }
 
 
@@ -45,6 +57,13 @@ pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 /// There's no way to retrieve the original "baz" mapping.
 pub struct StructuredData {
     elements: BTreeMap<SDIDType, StructuredDataElement>,
+}
+
+impl Encodable for StructuredData {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        self.elements.encode(s)
+    }
 }
 
 impl StructuredData {
@@ -92,10 +111,11 @@ impl StructuredData {
 }
 
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,RustcEncodable)]
 pub struct SyslogMessage {
     pub severity: severity::SyslogSeverity,
     pub facility: facility::SyslogFacility,
+    pub version: i32,
     pub timestamp: Option<time_t>,
     pub hostname: Option<String>,
     pub application: Option<String>,
@@ -108,7 +128,10 @@ pub struct SyslogMessage {
 
 #[cfg(test)]
 mod tests {
-    use super::StructuredData;
+    use rustc_serialize::json;
+    use super::{StructuredData,SyslogMessage};
+    use severity::SyslogSeverity::*;
+    use facility::SyslogFacility::*;
 
     #[test]
     fn test_structured_data_basic() {
@@ -117,5 +140,27 @@ mod tests {
         let v = s.find_tuple("foo", "bar").expect("should find foo/bar");
         assert_eq!(v, "baz");
         assert!(s.find_tuple("foo", "baz").is_none());
+    }
+
+    #[test]
+    fn test_serialization() {
+        let m = SyslogMessage {
+            severity: SEV_INFO,
+            facility: LOG_KERN,
+            version: 1,
+            timestamp: None,
+            hostname: None,
+            application: None,
+            procid: None,
+            msgid: None,
+            sd: StructuredData::new_empty(),
+            message: String::from("")
+        };
+
+        let encoded = json::encode(&m).expect("Should encode to JSON");
+        println!("{:?}", encoded);
+        // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
+        // version changes. *shrug*
+        assert_eq!(encoded, "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"hostname\":null,\"application\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"message\":\"\"}");
     }
 }

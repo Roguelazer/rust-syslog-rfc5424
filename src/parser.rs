@@ -268,7 +268,6 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
     take_char!(rest, '>');
     let (sev, fac) = try!(parse_pri_val(prival));
     let version = take_item!(parse_num(rest, 1, 2), rest);
-    assert!(version == 1);
     //println!("got version {:?}, rest={:?}", version, rest);
     take_char!(rest, ' ');
     let timestamp = take_item!(parse_timestamp(rest), rest);
@@ -303,6 +302,7 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
     Ok(SyslogMessage {
         severity: sev,
         facility: fac,
+        version: version,
         timestamp: timestamp,
         hostname: hostname,
         application: appname,
