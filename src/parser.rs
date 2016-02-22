@@ -7,7 +7,7 @@ use time;
 
 use severity;
 use facility;
-use message::{time_t,SyslogMessage,ProcIdType,StructuredData,StructuredDataElement,StructuredDataParam};
+use message::{time_t,SyslogMessage,ProcIdType,StructuredData};
 
 #[derive(Debug)]
 pub enum ParseErr {
@@ -133,7 +133,7 @@ fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
     return Err(ParseErr::UnexpectedEndOfInput);
 }
 
-fn parse_sd_params(input: &str) -> Result<(Vec<StructuredDataParam>, &str), ParseErr> {
+fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseErr> {
     let mut params = Vec::new();
     let mut top = input;
     loop {
@@ -142,10 +142,7 @@ fn parse_sd_params(input: &str) -> Result<(Vec<StructuredDataParam>, &str), Pars
             let param_name = take_item!(parse_sd_id(rest), rest);
             take_char!(rest, '=');
             let param_value = take_item!(parse_param_value(rest), rest);
-            params.push(StructuredDataParam {
-                param_id: String::from(param_name),
-                param_value: String::from(param_value)
-            });
+            params.push((String::from(param_name), String::from(param_value)));
             top = rest;
         } else {
             return Ok((params, top));
@@ -153,31 +150,28 @@ fn parse_sd_params(input: &str) -> Result<(Vec<StructuredDataParam>, &str), Pars
     }
 }
 
-fn parse_sde(sde: &str) -> Result<(StructuredDataElement, &str), ParseErr> {
+fn parse_sde(sde: &str) -> Result<((String, Vec<(String, String)>), &str), ParseErr> {
     let mut rest = sde;
     take_char!(rest, '[');
     let id = take_item!(parse_sd_id(rest), rest);
     let params = take_item!(parse_sd_params(rest), rest);
     take_char!(rest, ']');
-    Ok((StructuredDataElement {
-        sd_id: id,
-        params: params
-    }, rest))
+    Ok(((id, params), rest))
 }
 
 fn parse_sd(structured_data_raw: &str) -> Result<(StructuredData, &str), ParseErr> {
-    let mut elements = Vec::new();
+    let mut sd = StructuredData::new_empty();
     if structured_data_raw.chars().next() == Some('-') {
-        return Ok((StructuredData {
-            elements: elements
-        }, &structured_data_raw[1..]))
+        return Ok((sd, &structured_data_raw[1..]))
     }
     let mut rest = structured_data_raw;
     loop {
-        let element = take_item!(parse_sde(rest), rest);
-        elements.push(element);
+        let (sd_id, params) = take_item!(parse_sde(rest), rest);
+        for (sd_param_id, sd_param_value) in params.into_iter() {
+            sd.insert_tuple(sd_id.clone(), sd_param_id, sd_param_value);
+        }
         if rest.chars().next() == Some(' ') {
-            return Ok((StructuredData { elements: elements }, rest))
+            return Ok((sd, rest));
         }
     }
 }
@@ -397,12 +391,13 @@ mod tests {
         assert_eq!(msg.message, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 1);
-        assert_eq!(msg.sd.elements, vec![message::StructuredDataElement { sd_id: String::from("meta"), params: vec![message::StructuredDataParam { param_id: String::from("sequenceId"), param_value: String::from("29") }]}]);
+        let v = msg.sd.find_tuple("meta", "sequenceId").expect("Should contain meta sequenceId");
+        assert_eq!(v, "29");
     }
 
     #[test]
     fn test_sd_features() {
-        let msg = parse_message("<78>1 2016-01-15T00:04:01Z host1 CROND 10391 - [meta sequenceId=\"29\" sequenceBlah=\"foo\"][my key=\"value\"] some_message").expect("Should parse complex message");
+        let msg = parse_message("<78>1 2016-01-15T00:04:01Z host1 CROND 10391 - [meta sequenceId=\"29\" sequenceBlah=\"foo\"][my key=\"value\"][meta bar=\"baz=\"] some_message").expect("Should parse complex message");
         assert_eq!(msg.facility, SyslogFacility::LOG_CRON);
         assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
         assert_eq!(msg.hostname, Some(String::from("host1")));
@@ -411,33 +406,14 @@ mod tests {
         assert_eq!(msg.message, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 2);
-        assert_eq!(msg.sd, message::StructuredData { elements: vec![
-            message::StructuredDataElement {
-                sd_id: String::from("meta"),
-                params: vec![
-                    message::StructuredDataParam {
-                        param_id: String::from("sequenceId"), param_value: String::from("29") 
-                    },
-                    message::StructuredDataParam {
-                        param_id: String::from("sequenceBlah"), param_value: String::from("foo") 
-                    }
-                ],
-            }, message::StructuredDataElement {
-                sd_id: String::from("my"),
-                params: vec![
-                    message::StructuredDataParam {
-                        param_id: String::from("key"), param_value: String::from("value")
-                    }
-                ]
-            }
-        ] }); 
+        assert_eq!(msg.sd.find_sdid("meta").expect("should contain meta").len(), 3);
     }
 
     #[test]
     fn test_sd_with_escaped_quote() {
         let msg_text = r#"<1>1 - - - - - [meta key="val\"ue"] message"#;
         let msg = parse_message(msg_text).expect("should parse");
-        assert_eq!(msg.sd.elements[0].params[0].param_value, "val\"ue");
+        assert_eq!(msg.sd.find_tuple("meta", "key").expect("Should contain meta key"), r#"val"ue"#);
     }
 
     #[test]
