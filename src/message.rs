@@ -143,6 +143,16 @@ mod tests {
     }
 
     #[test]
+    fn test_structured_data_serialization() {
+        let mut s = StructuredData::new_empty();
+        s.insert_tuple("foo", "bar", "baz");
+        s.insert_tuple("foo", "baz", "bar");
+        s.insert_tuple("faa", "bar", "baz");
+        let encoded = json::encode(&s).expect("Should encode to JSON");
+        assert_eq!(encoded, r#"{"faa":{"bar":"baz"},"foo":{"bar":"baz","baz":"bar"}}"#);
+    }
+
+    #[test]
     fn test_serialization() {
         let m = SyslogMessage {
             severity: SEV_INFO,

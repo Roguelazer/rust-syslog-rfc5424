@@ -1,8 +1,10 @@
 #[macro_use]
 extern crate timeit;
 extern crate syslog_rfc5424;
+extern crate rustc_serialize;
 
 use syslog_rfc5424::parse_message;
+use rustc_serialize::json;
 
 // Stupid benchmark tool using the timeit! macro because the official benchmarking tools are
 // **still* nightly-Rust-only, even though they're, like, a year old
@@ -27,5 +29,11 @@ fn main() {
     let average_message = r#"<29>1 2016-02-21T04:32:57+00:00 web1 someservice - - [origin x-service="someservice"][meta sequenceId="14125553"] 127.0.0.1 - - 1456029177 "GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575"#;
     timeit!({
         parse_message(average_message).unwrap();
+    });
+    println!("Parsing an average message and encoding it to json");
+    let average_message = r#"<29>1 2016-02-21T04:32:57+00:00 web1 someservice - - [origin x-service="someservice"][meta sequenceId="14125553"] 127.0.0.1 - - 1456029177 "GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575"#;
+    timeit!({
+        let m = parse_message(average_message).unwrap();
+        json::encode(&m).unwrap();
     });
 }
