@@ -29,68 +29,65 @@ pub type SDParamIDType = String;
 pub type SDParamValueType = String;
 
 
-#[derive(Clone,Debug,PartialEq,Eq)]
-/// A single key-value SD pair
-pub struct StructuredDataParam {
-    pub param_id: SDParamIDType,
-    pub param_value: SDParamValueType,
-}
+pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 
 
 #[derive(Clone,Debug,PartialEq,Eq)]
-pub struct StructuredDataElement {
-    pub sd_id: SDIDType,
-    pub params: Vec<StructuredDataParam>,
-}
-
-#[derive(Clone,Debug,PartialEq,Eq)]
+/// Container for the StructuredData component of a syslog message.
+///
+/// This is a map from SD_ID to pairs of SD_ParamID, SD_ParamValue
+///
+/// The spec does not forbid repeated keys. However, for convenience, we *do* forbid repeated keys.
+/// That is to say, if you have a message like
+///
+/// [foo bar="baz" bar="bing"]
+///
+/// There's no way to retrieve the original "baz" mapping.
 pub struct StructuredData {
-    pub elements: Vec<StructuredDataElement>
+    elements: BTreeMap<SDIDType, StructuredDataElement>,
 }
-
-/// Map that StructuredData can be converted into
-pub type StructuredDataMap = BTreeMap<SDIDType, BTreeMap<SDParamIDType, SDParamValueType>>;
 
 impl StructuredData {
-    /// Length of this SD (just counts the number of elements, not the number of (element,
-    /// param_id) pairs.
-    pub fn len(&self) -> usize {
+    pub fn new_empty() -> StructuredData
+    {
+        StructuredData {
+            elements: BTreeMap::new()
+        }
+    }
+
+    /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
+    pub fn insert_tuple<SI, SPI, SPV> (&mut self, sd_id: SI, sd_param_id: SPI, sd_param_value: SPV) -> ()
+        where SI: Into<SDIDType>, SPI: Into<SDParamIDType>, SPV: Into<SDParamValueType>
+    {
+        let mut sub_map = self.elements.entry(sd_id.into()).or_insert(BTreeMap::new());
+        sub_map.insert(sd_param_id.into(), sd_param_value.into());
+    }
+
+    /// Lookup by SDID, SDParamID pair
+    pub fn find_tuple<'b>(&'b self, sd_id: &str, sd_param_id: &str) -> Option<&'b SDParamValueType>
+    {
+        // TODO: use traits to make these based on the public types isntead of &str
+        if let Some(sub_map) = self.elements.get(sd_id) {
+            if let Some(value) = sub_map.get(sd_param_id) {
+                Some(value)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Find all param/value mappings for a given SDID
+    pub fn find_sdid<'b>(&'b self, sd_id: &str) -> Option<&'b BTreeMap<SDParamIDType, SDParamValueType>>
+    {
+        self.elements.get(sd_id)
+    }
+
+    /// The number of distinct SD_IDs
+    pub fn len(&self) -> usize
+    {
         self.elements.len()
-    }
-
-    /// Convert the SD into a nested tree of the form
-    ///
-    /// {
-    ///     "sd_id": {
-    ///         "param_id_1": "param_value",
-    ///         "param_id_2": "param_value'
-    ///     }
-    /// }
-    pub fn as_btree(&self) -> StructuredDataMap {
-        let mut res: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-
-        for sde in self.elements.iter() {
-            let mut sub_map = res.entry(sde.sd_id.clone()).or_insert(BTreeMap::new());
-            for param in sde.params.iter() {
-                sub_map.insert(param.param_id.clone(), param.param_value.clone());
-            }
-        }
-        res
-    }
-}
-
-impl Into<StructuredDataMap> for StructuredData {
-    /// Optimized conversion to a BTreeMap which consumes the StructuredData
-    fn into(self) -> StructuredDataMap {
-        let mut res: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
-
-        for sde in self.elements.into_iter() {
-            let mut sub_map = res.entry(sde.sd_id).or_insert(BTreeMap::new());
-            for param in sde.params.into_iter() {
-                sub_map.insert(param.param_id, param.param_value);
-            }
-        }
-        res
     }
 }
 
@@ -111,31 +108,14 @@ pub struct SyslogMessage {
 
 #[cfg(test)]
 mod tests {
-    use super::{StructuredData,StructuredDataElement,StructuredDataParam};
+    use super::StructuredData;
 
     #[test]
-    fn test_as_btree() {
-        let sd = StructuredData {
-            elements: vec![
-                StructuredDataElement {
-                    sd_id: String::from("id1"),
-                    params: vec![
-                        StructuredDataParam {
-                            param_id: String::from("k1"),
-                            param_value: String::from("v1"),
-                        }
-                    ]
-                }
-            ]
-        };
-
-        let bt = sd.as_btree();
-
-        assert_eq!(bt.len(), 1);
-        assert_eq!(bt.keys().collect::<Vec<&String>>(), vec!["id1"]);
-
-        let sm1 = bt.get("id1").expect("should unwrap");
-
-        assert_eq!(sm1.keys().collect::<Vec<&String>>(), vec!["k1"]);
+    fn test_structured_data_basic() {
+        let mut s = StructuredData::new_empty();
+        s.insert_tuple("foo", "bar", "baz");
+        let v = s.find_tuple("foo", "bar").expect("should find foo/bar");
+        assert_eq!(v, "baz");
+        assert!(s.find_tuple("foo", "baz").is_none());
     }
 }
