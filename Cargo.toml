@@ -17,4 +17,4 @@ assert_matches = "1.0"
 rustc-serialize = "0.3"
 
 [dev-dependencies]
-timeit = "*"
+timeit = "0.1"
