@@ -1,3 +1,5 @@
+use rustc_serialize::{Encodable,Encoder};
+
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
 /// Syslog facilities. Taken From RFC 5424, but I've heard that some platforms mix these around.
@@ -59,5 +61,38 @@ impl SyslogFacility {
             23 => Some(SyslogFacility::LOG_LOCAL7),
             _ => None,
         }
+    }
+}
+
+
+impl Encodable for SyslogFacility {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        s.emit_str(match self {
+            &SyslogFacility::LOG_KERN => "kern",
+            &SyslogFacility::LOG_USER => "user",
+            &SyslogFacility::LOG_MAIL => "mail",
+            &SyslogFacility::LOG_DAEMON => "daemon",
+            &SyslogFacility::LOG_AUTH => "auth",
+            &SyslogFacility::LOG_SYSLOG => "syslog",
+            &SyslogFacility::LOG_LPR => "lpr",
+            &SyslogFacility::LOG_NEWS => "news",
+            &SyslogFacility::LOG_UUCP => "uucp",
+            &SyslogFacility::LOG_CRON => "cron",
+            &SyslogFacility::LOG_AUTHPRIV => "authpriv",
+            &SyslogFacility::LOG_FTP => "ftp",
+            &SyslogFacility::LOG_NTP => "ntp",
+            &SyslogFacility::LOG_AUDIT => "audit",
+            &SyslogFacility::LOG_ALERT => "alert",
+            &SyslogFacility::LOG_CLOCKD => "clockd",
+            &SyslogFacility::LOG_LOCAL0 => "local0",
+            &SyslogFacility::LOG_LOCAL1 => "local1",
+            &SyslogFacility::LOG_LOCAL2 => "local2",
+            &SyslogFacility::LOG_LOCAL3 => "local3",
+            &SyslogFacility::LOG_LOCAL4 => "local4",
+            &SyslogFacility::LOG_LOCAL5 => "local5",
+            &SyslogFacility::LOG_LOCAL6 => "local6",
+            &SyslogFacility::LOG_LOCAL7 => "local7",
+        })
     }
 }
