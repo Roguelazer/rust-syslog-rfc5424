@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::str::FromStr;
 use std::str;
 use std::num;
@@ -109,13 +110,14 @@ fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
 }
 
 /** Parse a param_value... a.k.a. a quoted string */
-fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
+fn parse_param_value(input: &str) -> Result<(Cow<str>, &str), ParseErr> {
     let mut rest = input;
     take_char!(rest, '"');
     // Can't do a 0-copy &str slice here because we need to un-escape escaped quotes
     // in the string. :-(
     let mut result = String::new();
 
+    let mut saw_any_escapes = false;
     let mut escaped = false;
 
     for (idx, chr) in rest.char_indices() {
@@ -124,13 +126,24 @@ fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
         } else {
             if chr == '\\' {
                 escaped = true;
+                if !saw_any_escapes {
+                    result.extend(rest[..idx].chars());
+                }
+                saw_any_escapes = true;
                 continue;
             }
             if chr == '"' {
-                return Ok((result, &input[(idx + 2)..]));
+                let res_cow = if saw_any_escapes {
+                    Cow::Owned(result)
+                } else {
+                    Cow::Borrowed(&rest[..idx])
+                };
+                return Ok((res_cow, &rest[(idx + 1)..]));
             }
         }
-        result.push(chr)
+        if saw_any_escapes {
+            result.push(chr);
+        }
     }
 
     return Err(ParseErr::UnexpectedEndOfInput);
@@ -145,7 +158,8 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseEr
             let param_name = take_item!(parse_sd_id(rest), rest);
             take_char!(rest, '=');
             let param_value = take_item!(parse_param_value(rest), rest);
-            params.push((String::from(param_name), String::from(param_value)));
+            // is there an uglier modifier than &*
+            params.push((String::from(param_name), String::from(&*param_value)));
             top = rest;
         } else {
             return Ok((params, top));
