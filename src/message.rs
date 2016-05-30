@@ -3,6 +3,7 @@
 use std::string::String;
 use std::collections::BTreeMap;
 use std::convert::Into;
+use std::ops;
 
 use rustc_serialize::{Encodable,Encoder};
 
@@ -57,6 +58,13 @@ pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 /// There's no way to retrieve the original "baz" mapping.
 pub struct StructuredData {
     elements: BTreeMap<SDIDType, StructuredDataElement>,
+}
+
+impl ops::Deref for StructuredData {
+    type Target = BTreeMap<SDIDType, StructuredDataElement>;
+    fn deref(&self) -> &Self::Target {
+        &self.elements
+    }
 }
 
 impl Encodable for StructuredData {
@@ -172,5 +180,16 @@ mod tests {
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
         assert_eq!(encoded, "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
+    }
+
+    #[test]
+    fn test_deref_structureddata() {
+        let mut s = StructuredData::new_empty();
+        s.insert_tuple("foo", "bar", "baz");
+        s.insert_tuple("foo", "baz", "bar");
+        s.insert_tuple("faa", "bar", "baz");
+        assert_eq!("baz", s.get("foo").and_then(|foo| foo.get("bar")).unwrap());
+        assert_eq!("bar", s.get("foo").and_then(|foo| foo.get("baz")).unwrap());
+        assert_eq!("baz", s.get("faa").and_then(|foo| foo.get("bar")).unwrap());
     }
 }
