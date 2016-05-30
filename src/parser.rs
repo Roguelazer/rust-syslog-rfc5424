@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::str::FromStr;
+use std::str;
 use std::num;
 use std::string;
 
@@ -18,6 +20,7 @@ pub enum ParseErr {
     TooFewDigits,
     TooManyDigits,
     InvalidUTCOffset,
+    BaseUnicodeError(str::Utf8Error),
     UnicodeError(string::FromUtf8Error),
     ExpectedTokenErr(char),
     IntConversionErr(num::ParseIntError),
@@ -84,35 +87,37 @@ macro_rules! take_char {
     }}
 }
 
-fn take_while<F>(input: &str, f: F, max_chars: usize) -> (String, Option<&str>)
+fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
     where F: Fn(char) -> bool {
-    let mut result = String::new();
 
     for (idx, chr) in input.char_indices() {
         if !f(chr) {
-            return (result, Some(&input[idx..]));
+            return (&input[..idx], Some(&input[idx..]));
         }
-        if result.len() == max_chars {
-            return (result, Some(&input[idx..]));
+        if idx == max_chars {
+            return (&input[..idx], Some(&input[idx..]));
         }
-        result.push(chr);
     }
-    (result, None)
+    ("", None)
 }
 
 fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
     let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
-    Ok((res, match rest {
+    Ok((String::from(res), match rest {
         Some(s) => s,
         None => { return Err(ParseErr::UnexpectedEndOfInput); }
     }))
 }
 
-fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
+/** Parse a param_value... a.k.a. a quoted string */
+fn parse_param_value(input: &str) -> Result<(Cow<str>, &str), ParseErr> {
     let mut rest = input;
     take_char!(rest, '"');
+    // Can't do a 0-copy &str slice here because we need to un-escape escaped quotes
+    // in the string. :-(
     let mut result = String::new();
 
+    let mut saw_any_escapes = false;
     let mut escaped = false;
 
     for (idx, chr) in rest.char_indices() {
@@ -121,13 +126,24 @@ fn parse_param_value(input: &str) -> Result<(String, &str), ParseErr> {
         } else {
             if chr == '\\' {
                 escaped = true;
+                if !saw_any_escapes {
+                    result.extend(rest[..idx].chars());
+                }
+                saw_any_escapes = true;
                 continue;
             }
             if chr == '"' {
-                return Ok((result, &input[(idx + 2)..]));
+                let res_cow = if saw_any_escapes {
+                    Cow::Owned(result)
+                } else {
+                    Cow::Borrowed(&rest[..idx])
+                };
+                return Ok((res_cow, &rest[(idx + 1)..]));
             }
         }
-        result.push(chr)
+        if saw_any_escapes {
+            result.push(chr);
+        }
     }
 
     return Err(ParseErr::UnexpectedEndOfInput);
@@ -142,7 +158,8 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseEr
             let param_name = take_item!(parse_sd_id(rest), rest);
             take_char!(rest, '=');
             let param_value = take_item!(parse_param_value(rest), rest);
-            params.push((String::from(param_name), String::from(param_value)));
+            // is there an uglier modifier than &*
+            params.push((String::from(param_name), String::from(&*param_value)));
             top = rest;
         } else {
             return Ok((params, top));
@@ -243,19 +260,20 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> Result<(Option<S
     if m.chars().next() == Some('-') {
         return Ok((None, &m[1..]))
     }
-    let mut buf = Vec::new();
-    for (idx, chr) in m.as_bytes().iter().enumerate() {
+    let byte_ary = m.as_bytes();
+    for (idx, chr) in byte_ary.iter().enumerate() {
         //println!("idx={:?}, buf={:?}, chr={:?}", idx, buf, chr);
         if *chr < 33 || *chr > 126 {
-            if buf.len() < min_length {
+            if idx < min_length {
                 return Err(ParseErr::TooFewDigits);
             }
-            return Ok((Some(try!(String::from_utf8(buf).map_err(ParseErr::UnicodeError))), &m[idx..]))
+            let utf8_ary = try!(str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError));
+            return Ok((Some(String::from(utf8_ary)), &m[idx..]));
         }
-        if buf.len() == max_length {
-            return Ok((Some(try!(String::from_utf8(buf).map_err(ParseErr::UnicodeError))), &m[idx..]))
+        if idx >= max_length {
+            let utf8_ary = try!(str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError));
+            return Ok((Some(String::from(utf8_ary)), &m[idx..]));
         }
-        buf.push(*chr);
     }
     return Err(ParseErr::UnexpectedEndOfInput)
 }
