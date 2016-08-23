@@ -10,11 +10,11 @@ license = "ISC"
 readme = "README.md"
 
 [dependencies]
-time = "0.1"
+time = "^0.1"
 # this should be a dev dependency, but there's some kind of issue with
 # dev-only macro crates
 assert_matches = "1.0"
-rustc-serialize = "0.3"
+rustc-serialize = "^0.3"
 
 [dev-dependencies]
 timeit = "0.1"
