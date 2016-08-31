@@ -1,3 +1,7 @@
+Unreleased
+-----------
+- Use AsRef in the message parser instead of Into, since we do not *need* ownership
+
 0.3.0 (2016-05-30)
 ------------------
 - add Deref to StructuredMessage (#4, via @pzol)
