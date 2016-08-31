@@ -279,7 +279,27 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> Result<(Option<S
 }
 
 
-fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
+/// Parse a string into a SyslogMessage object
+///
+/// # Arguments
+///
+///  * `s`: Anything convertible to a string
+///
+/// # Returns
+///
+///  * ParseErr if the string is not parseable as an RFC5424 message
+///
+/// # Example
+///
+/// ```
+/// use syslog_rfc5424::parse_message;
+///
+/// let message = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").unwrap();
+///
+/// assert!(message.hostname.unwrap() == "host1");
+/// ```
+pub fn parse_message<T: AsRef<str>>(message_ref: T) -> Result<SyslogMessage, ParseErr> {
+    let m = message_ref.as_ref();
     let mut rest = m;
     take_char!(rest, '<');
     let prival = take_item!(parse_num(rest, 1, 3), rest);
@@ -330,34 +350,6 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
         msg: msg
     })
 }
-
-
-
-/// Parse a string into a SyslogMessage object
-///
-/// # Arguments
-///
-///  * `s`: Anything convertible to a string
-///
-/// # Returns
-///
-///  * ParseErr if the string is not parseable as an RFC5424 message
-///
-/// # Example
-///
-/// ```
-/// use syslog_rfc5424::parse_message;
-///
-/// let message = parse_message("<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [meta sequenceId=\"29\"] some_message").unwrap();
-///
-/// assert!(message.hostname.unwrap() == "host1");
-/// ```
-pub fn parse_message<S> (s: S) -> Result<SyslogMessage, ParseErr> 
-    where S: Into<String> {
-
-    parse_message_s(&s.into())
-}
-
 
 #[cfg(test)]
 mod tests {

@@ -75,7 +75,7 @@ impl Encodable for StructuredData {
 }
 
 impl StructuredData {
-    pub fn new_empty() -> StructuredData
+    pub fn new_empty() -> Self
     {
         StructuredData {
             elements: BTreeMap::new()

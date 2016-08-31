@@ -33,7 +33,7 @@ pub enum SyslogFacility {
 
 impl SyslogFacility {
     /// Convert an int (as used in the wire serialization) into a SyslogFacility
-    pub fn from_int(i: i32) -> Option<SyslogFacility> {
+    pub fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(SyslogFacility::LOG_KERN),
             1 => Some(SyslogFacility::LOG_USER),

@@ -19,7 +19,7 @@ impl SyslogSeverity {
     ///
     /// Returns an Option, but the wire protocol will only include 0..7, so should
     /// never return None in practical usage.
-    pub fn from_int(i: i32) -> Option<SyslogSeverity> {
+    pub fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(SyslogSeverity::SEV_EMERG),
             1 => Some(SyslogSeverity::SEV_ALERT),
