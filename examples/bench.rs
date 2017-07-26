@@ -36,4 +36,10 @@ fn main() {
         let m = parse_message(average_message).unwrap();
         json::encode(&m).unwrap();
     });
+
+    let average_message = r#"<14>1 2017-07-26T14:47:35.869952+05:30 my_hostname custom_appname 5678 some_unique_msgid - \u{feff}Some other message"#;
+    timeit!({
+        let m = parse_message(average_message).unwrap();
+        json::encode(&m).unwrap();
+    });
 }

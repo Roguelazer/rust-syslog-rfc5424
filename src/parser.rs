@@ -228,7 +228,7 @@ fn parse_timestamp(m: &str) -> Result<(Option<time_t>, &str), ParseErr> {
     tm.tm_min = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, ':');
     tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
-    if rest.chars().next() == Some('-') {
+    if rest.chars().next() == Some('.') {
         take_char!(rest, '.');
         take_item!(parse_num(rest, 1, 6), rest);
     }
