@@ -450,4 +450,24 @@ mod tests {
         let msg = parse_message("<134>Feb 18 20:53:31 haproxy[376]: I am a message");
         assert!(msg.is_err());
     }
+
+    #[test]
+    fn test_example_timestamps() {
+        // these are the example timestamps in the rfc
+
+        let msg = parse_message("<1>1 1985-04-12T23:20:50.52Z host - - - -")
+            .expect("Should parse empty message");
+        assert_eq!(msg.timestamp, Some(482196050));
+
+        let msg = parse_message("<1>1 1985-04-12T19:20:50.52-04:00 host - - - -")
+            .expect("Should parse empty message");
+        assert_eq!(msg.timestamp, Some(482167250));
+
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000003-07:00 host - - - -")
+            .expect("Should parse empty message");
+        assert_eq!(msg.timestamp, Some(1061676855));
+
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003-07:00 host - - - -");
+        assert!(msg.is_err(), "expected parse fail");
+    }
 }
