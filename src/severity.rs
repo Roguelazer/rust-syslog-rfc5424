@@ -1,4 +1,8 @@
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Encodable,Encoder};
+
+#[cfg(feature="serde-serialize")]
+use serde::{Serializer, Serialize};
 
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
@@ -15,7 +19,7 @@ pub enum SyslogSeverity {
 }
 
 impl SyslogSeverity {
-    /// Convert an int (as used in the wire serialization) into a SyslogFacility
+    /// Convert an int (as used in the wire serialization) into a `SyslogSeverity`
     ///
     /// Returns an Option, but the wire protocol will only include 0..7, so should
     /// never return None in practical usage.
@@ -32,13 +36,10 @@ impl SyslogSeverity {
             _ => None,
         }
     }
-}
 
-
-impl Encodable for SyslogSeverity {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
-    {
-        s.emit_str(match *self {
+    /// Convert a syslog severity into a unique string representation
+    pub fn as_str(&self) -> &'static str {
+        match *self {
             SyslogSeverity::SEV_EMERG => "emerg",
             SyslogSeverity::SEV_ALERT => "alert",
             SyslogSeverity::SEV_CRIT => "crit",
@@ -47,6 +48,42 @@ impl Encodable for SyslogSeverity {
             SyslogSeverity::SEV_NOTICE => "notice",
             SyslogSeverity::SEV_INFO => "info",
             SyslogSeverity::SEV_DEBUG => "debug"
-        })
+        }
+    }
+}
+
+
+
+#[cfg(feature = "rustc-serialize")]
+impl Encodable for SyslogSeverity {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        s.emit_str(self.as_str())
+    }
+}
+
+
+#[cfg(feature = "serde-serialize")]
+impl Serialize for SyslogSeverity {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(self.as_str())
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::SyslogSeverity;
+
+    #[test]
+    fn test_deref() {
+        assert_eq!(SyslogSeverity::SEV_EMERG.as_str(), "emerg");
+        assert_eq!(SyslogSeverity::SEV_ALERT.as_str(), "alert");
+        assert_eq!(SyslogSeverity::SEV_CRIT.as_str(), "crit");
+        assert_eq!(SyslogSeverity::SEV_ERR.as_str(), "err");
+        assert_eq!(SyslogSeverity::SEV_WARNING.as_str(), "warning");
+        assert_eq!(SyslogSeverity::SEV_NOTICE.as_str(), "notice");
+        assert_eq!(SyslogSeverity::SEV_INFO.as_str(), "info");
+        assert_eq!(SyslogSeverity::SEV_DEBUG.as_str(), "debug");
     }
 }

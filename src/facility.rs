@@ -1,4 +1,8 @@
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Encodable,Encoder};
+
+#[cfg(feature="serde-serialize")]
+use serde::{Serializer, Serialize};
 
 #[derive(Copy,Clone,Debug,PartialEq)]
 #[allow(non_camel_case_types)]
@@ -32,7 +36,7 @@ pub enum SyslogFacility {
 }
 
 impl SyslogFacility {
-    /// Convert an int (as used in the wire serialization) into a SyslogFacility
+    /// Convert an int (as used in the wire serialization) into a `SyslogFacility`
     pub fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(SyslogFacility::LOG_KERN),
@@ -62,13 +66,10 @@ impl SyslogFacility {
             _ => None,
         }
     }
-}
 
-
-impl Encodable for SyslogFacility {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
-    {
-        s.emit_str(match *self {
+    /// Convert a syslog facility into a unique string representation
+    pub fn as_str(&self) -> &'static str {
+        match *self {
             SyslogFacility::LOG_KERN => "kern",
             SyslogFacility::LOG_USER => "user",
             SyslogFacility::LOG_MAIL => "mail",
@@ -93,6 +94,34 @@ impl Encodable for SyslogFacility {
             SyslogFacility::LOG_LOCAL5 => "local5",
             SyslogFacility::LOG_LOCAL6 => "local6",
             SyslogFacility::LOG_LOCAL7 => "local7",
-        })
+        }
+    }
+}
+
+
+#[cfg(feature = "rustc-serialize")]
+impl Encodable for SyslogFacility {
+    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
+    {
+        s.emit_str(self.as_str())
+    }
+}
+
+
+#[cfg(feature = "serde-serialize")]
+impl Serialize for SyslogFacility {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(self.as_str())
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::SyslogFacility;
+
+    #[test]
+    fn test_deref() {
+        assert_eq!(SyslogFacility::LOG_KERN.as_str(), "kern");
     }
 }
