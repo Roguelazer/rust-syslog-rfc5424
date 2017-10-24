@@ -173,6 +173,12 @@ mod tests {
     #[cfg(feature = "serde-serialize")]
     use serde_json;
     use super::StructuredData;
+    #[cfg(any(feature="serde-serialize", feature="rustc-serialize"))]
+    use super::SyslogMessage;
+    #[cfg(any(feature="serde-serialize", feature="rustc-serialize"))]
+    use severity::SyslogSeverity::*;
+    #[cfg(any(feature="serde-serialize", feature="rustc-serialize"))]
+    use facility::SyslogFacility::*;
 
     #[test]
     fn test_structured_data_basic() {
