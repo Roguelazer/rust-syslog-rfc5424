@@ -1,4 +1,4 @@
-Unreleased
+0.4.0 (2017-10-24)
 ----------
 - Make `rustc-serialize` support optional behind the self-named feature flag
 - Add optional `serde` support behind the `serde-serialize` feature flag
