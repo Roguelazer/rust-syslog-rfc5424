@@ -1,4 +1,9 @@
-0.3.1 (2017-10-240
+Unreleased
+----------
+- Make `rustc-serialize` support optional behind the self-named feature flag
+- Add optional `serde` support behind the `serde-serialize` feature flag
+
+0.3.1 (2017-10-24)
 -----------
 - Use AsRef in the message parser instead of Into, since we do not *need* ownership
 - Support sub-second timestamp resolution (Fixes #5 / #6)
