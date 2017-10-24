@@ -1,3 +1,4 @@
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Encodable,Encoder};
 
 #[derive(Copy,Clone,Debug,PartialEq)]
@@ -65,6 +66,7 @@ impl SyslogFacility {
 }
 
 
+#[cfg(feature = "rustc-serialize")]
 impl Encodable for SyslogFacility {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
     {

@@ -1,3 +1,4 @@
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Encodable,Encoder};
 
 #[derive(Copy,Clone,Debug,PartialEq)]
@@ -35,6 +36,7 @@ impl SyslogSeverity {
 }
 
 
+#[cfg(feature = "rustc-serialize")]
 impl Encodable for SyslogSeverity {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
     {

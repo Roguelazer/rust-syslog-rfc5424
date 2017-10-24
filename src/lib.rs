@@ -33,6 +33,7 @@
 #[cfg(test)]
 extern crate assert_matches;
 extern crate time;
+#[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
 
 pub mod message;

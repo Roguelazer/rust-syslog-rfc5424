@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::convert::Into;
 use std::ops;
 
+#[cfg(feature = "rustc-serialize")]
 use rustc_serialize::{Encodable,Encoder};
 
 #[allow(non_camel_case_types)]
@@ -26,6 +27,8 @@ pub enum ProcIdType {
     Name(String)
 }
 
+
+#[cfg(feature = "rustc-serialize")]
 impl Encodable for ProcIdType {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
     {
@@ -67,6 +70,7 @@ impl ops::Deref for StructuredData {
     }
 }
 
+#[cfg(feature = "rustc-serialize")]
 impl Encodable for StructuredData {
     fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
     {
@@ -125,7 +129,8 @@ impl StructuredData {
 }
 
 
-#[derive(Clone,Debug,RustcEncodable)]
+#[cfg_attr(feature = "rustc-serialize", derive(RustcEncodable))]
+#[derive(Clone,Debug)]
 pub struct SyslogMessage {
     pub severity: severity::SyslogSeverity,
     pub facility: facility::SyslogFacility,
@@ -142,7 +147,8 @@ pub struct SyslogMessage {
 
 #[cfg(test)]
 mod tests {
-    use rustc_serialize::json;
+    #[cfg(feature = "rustc-serialize")]
+    use rustc_serialize;
     use super::{StructuredData,SyslogMessage};
     use severity::SyslogSeverity::*;
     use facility::SyslogFacility::*;
@@ -156,18 +162,20 @@ mod tests {
         assert!(s.find_tuple("foo", "baz").is_none());
     }
 
+    #[cfg(feature = "rustc-serialize")]
     #[test]
-    fn test_structured_data_serialization() {
+    fn test_structured_data_serialization_rustc_serialize() {
         let mut s = StructuredData::new_empty();
         s.insert_tuple("foo", "bar", "baz");
         s.insert_tuple("foo", "baz", "bar");
         s.insert_tuple("faa", "bar", "baz");
-        let encoded = json::encode(&s).expect("Should encode to JSON");
+        let encoded = rustc_serialize::json::encode(&s).expect("Should encode to JSON");
         assert_eq!(encoded, r#"{"faa":{"bar":"baz"},"foo":{"bar":"baz","baz":"bar"}}"#);
     }
 
+    #[cfg(feature = "rustc-serialize")]
     #[test]
-    fn test_serialization() {
+    fn test_serialization_rustc_serialize() {
         let m = SyslogMessage {
             severity: SEV_INFO,
             facility: LOG_KERN,
@@ -181,7 +189,7 @@ mod tests {
             msg: String::from("")
         };
 
-        let encoded = json::encode(&m).expect("Should encode to JSON");
+        let encoded = rustc_serialize::json::encode(&m).expect("Should encode to JSON");
         println!("{:?}", encoded);
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
