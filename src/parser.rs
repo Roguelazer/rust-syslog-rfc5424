@@ -40,21 +40,6 @@ pub enum ParseErr {
 // General convention is that the parse state is represented by a string slice named "rest"; the
 // macros will update that slice as they consume tokens.
 
-macro_rules! extract_field {
-    ($md:expr, $f:expr) => (match $md.name($f) {
-        Some("-") => None,
-        Some(f) => Some(String::from(f)),
-        None => { return Err(ParseErr::MissingField($f)) }
-    })
-}
-
-macro_rules! try_field_as_i32 {
-    ($md:expr, $f: expr) => (match $md.name($f) {
-        Some(f) => try!(i32::from_str(f).map_err(ParseErr::IntConversionErr)),
-        None => { return Err(ParseErr::MissingField($f)) }
-    })
-}
-
 macro_rules! maybe_expect_char {
     ($s:expr, $e: expr) => (match $s.chars().next() {
         Some($e) => Some(&$s[1..]),
@@ -64,12 +49,14 @@ macro_rules! maybe_expect_char {
 
 macro_rules! take_item {
     ($e:expr, $r:expr) => {{
-        let (t, r) = try!($e);
+        let (t, r) = $e?;
         $r = r;
         t
     }}
 }
 
+
+type ParseResult<T> = Result<T, ParseErr>;
 
 macro_rules! take_char {
     ($e: expr, $c:expr) => {{
@@ -101,7 +88,7 @@ fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
     ("", None)
 }
 
-fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
+fn parse_sd_id(input: &str) -> ParseResult<(String, &str)> {
     let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
     Ok((String::from(res), match rest {
         Some(s) => s,
@@ -109,8 +96,8 @@ fn parse_sd_id(input: &str) -> Result<(String, &str), ParseErr> {
     }))
 }
 
-/** Parse a param_value... a.k.a. a quoted string */
-fn parse_param_value(input: &str) -> Result<(Cow<str>, &str), ParseErr> {
+/** Parse a `param_value`... a.k.a. a quoted string */
+fn parse_param_value(input: &str) -> ParseResult<(Cow<str>, &str)> {
     let mut rest = input;
     take_char!(rest, '"');
     // Can't do a 0-copy &str slice here because we need to un-escape escaped quotes
@@ -127,7 +114,7 @@ fn parse_param_value(input: &str) -> Result<(Cow<str>, &str), ParseErr> {
             if chr == '\\' {
                 escaped = true;
                 if !saw_any_escapes {
-                    result.extend(rest[..idx].chars());
+                    result.push_str(&rest[..idx]);
                 }
                 saw_any_escapes = true;
                 continue;
@@ -146,10 +133,12 @@ fn parse_param_value(input: &str) -> Result<(Cow<str>, &str), ParseErr> {
         }
     }
 
-    return Err(ParseErr::UnexpectedEndOfInput);
+    Err(ParseErr::UnexpectedEndOfInput)
 }
 
-fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseErr> {
+type ParsedSDParams = Vec<(String, String)>;
+
+fn parse_sd_params(input: &str) -> ParseResult<(ParsedSDParams, &str)> {
     let mut params = Vec::new();
     let mut top = input;
     loop {
@@ -159,7 +148,7 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseEr
             take_char!(rest, '=');
             let param_value = take_item!(parse_param_value(rest), rest);
             // is there an uglier modifier than &*
-            params.push((String::from(param_name), String::from(&*param_value)));
+            params.push((param_name, String::from(&*param_value)));
             top = rest;
         } else {
             return Ok((params, top));
@@ -167,7 +156,7 @@ fn parse_sd_params(input: &str) -> Result<(Vec<(String, String)>, &str), ParseEr
     }
 }
 
-fn parse_sde(sde: &str) -> Result<((String, Vec<(String, String)>), &str), ParseErr> {
+fn parse_sde(sde: &str) -> ParseResult<((String, ParsedSDParams), &str)> {
     let mut rest = sde;
     take_char!(rest, '[');
     let id = take_item!(parse_sd_id(rest), rest);
@@ -176,44 +165,44 @@ fn parse_sde(sde: &str) -> Result<((String, Vec<(String, String)>), &str), Parse
     Ok(((id, params), rest))
 }
 
-fn parse_sd(structured_data_raw: &str) -> Result<(StructuredData, &str), ParseErr> {
+fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
     let mut sd = StructuredData::new_empty();
-    if structured_data_raw.chars().next() == Some('-') {
+    if structured_data_raw.starts_with('-') {
         return Ok((sd, &structured_data_raw[1..]))
     }
     let mut rest = structured_data_raw;
     loop {
         let (sd_id, params) = take_item!(parse_sde(rest), rest);
-        for (sd_param_id, sd_param_value) in params.into_iter() {
+        for (sd_param_id, sd_param_value) in params {
             sd.insert_tuple(sd_id.clone(), sd_param_id, sd_param_value);
         }
-        if rest.chars().next() == Some(' ') {
+        if rest.starts_with(' ') {
             return Ok((sd, rest));
         }
     }
 }
 
-fn parse_pri_val(pri: i32) -> Result<(severity::SyslogSeverity, facility::SyslogFacility), ParseErr> {
-    let sev = try!(severity::SyslogSeverity::from_int(pri & 0x7).ok_or(ParseErr::BadSeverityInPri));
-    let fac = try!(facility::SyslogFacility::from_int(pri >> 3).ok_or(ParseErr::BadFacilityInPri));
+fn parse_pri_val(pri: i32) -> ParseResult<(severity::SyslogSeverity, facility::SyslogFacility)> {
+    let sev = severity::SyslogSeverity::from_int(pri & 0x7).ok_or(ParseErr::BadSeverityInPri)?;
+    let fac = facility::SyslogFacility::from_int(pri >> 3).ok_or(ParseErr::BadFacilityInPri)?;
     Ok((sev, fac))
 }
 
-fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> Result<(i32, &str), ParseErr> {
+fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
     let (res, rest1) = take_while(s, |c| c >= '0' && c <= '9', max_digits);
-    let rest = try!(rest1.ok_or(ParseErr::UnexpectedEndOfInput));
+    let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
     if res.len() < min_digits {
         Err(ParseErr::TooFewDigits)
     } else if res.len() > max_digits {
         Err(ParseErr::TooManyDigits)
     } else {
-        Ok((try!(i32::from_str(&res).map_err(ParseErr::IntConversionErr)), rest))
+        Ok((i32::from_str(res).map_err(ParseErr::IntConversionErr)?, rest))
     }
 }
 
-fn parse_timestamp(m: &str) -> Result<(Option<time_t>, &str), ParseErr> {
+fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
     let mut rest = m;
-    if rest.chars().next() == Some('-') {
+    if rest.starts_with('-') {
         return Ok((None, &rest[1..]))
     }
     let mut tm = time::empty_tm();
@@ -228,7 +217,7 @@ fn parse_timestamp(m: &str) -> Result<(Option<time_t>, &str), ParseErr> {
     tm.tm_min = take_item!(parse_num(rest, 2, 2), rest);
     take_char!(rest, ':');
     tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
-    if rest.chars().next() == Some('.') {
+    if rest.starts_with('.') {
         take_char!(rest, '.');
         take_item!(parse_num(rest, 1, 6), rest);
     }
@@ -245,19 +234,19 @@ fn parse_timestamp(m: &str) -> Result<(Option<time_t>, &str), ParseErr> {
                 '-' => (-1, &rest[1..]),
                 _ => { return Err(ParseErr::InvalidUTCOffset); }
             };
-            let hours = try!(i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr));
-            let minutes = try!(i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr));
+            let hours = i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
+            let minutes = i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
             rest = &irest[5..];
             minutes + hours * 60 * sign
         }
     };
-    tm = tm + time::Duration::minutes(utc_offset_mins as i64);
+    tm = tm + time::Duration::minutes(i64::from(utc_offset_mins));
     tm.tm_isdst = -1;
     Ok((Some(tm.to_utc().to_timespec().sec), rest))
 }
 
-fn parse_term(m: &str, min_length: usize, max_length: usize) -> Result<(Option<String>, &str), ParseErr> {
-    if m.chars().next() == Some('-') {
+fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Option<String>, &str)> {
+    if m.starts_with('-') {
         return Ok((None, &m[1..]))
     }
     let byte_ary = m.as_bytes();
@@ -267,24 +256,24 @@ fn parse_term(m: &str, min_length: usize, max_length: usize) -> Result<(Option<S
             if idx < min_length {
                 return Err(ParseErr::TooFewDigits);
             }
-            let utf8_ary = try!(str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError));
+            let utf8_ary = str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError)?;
             return Ok((Some(String::from(utf8_ary)), &m[idx..]));
         }
         if idx >= max_length {
-            let utf8_ary = try!(str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError));
+            let utf8_ary = str::from_utf8(&byte_ary[..idx]).map_err(ParseErr::BaseUnicodeError)?;
             return Ok((Some(String::from(utf8_ary)), &m[idx..]));
         }
     }
-    return Err(ParseErr::UnexpectedEndOfInput)
+    Err(ParseErr::UnexpectedEndOfInput)
 }
 
 
-fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
+fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     let mut rest = m;
     take_char!(rest, '<');
     let prival = take_item!(parse_num(rest, 1, 3), rest);
     take_char!(rest, '>');
-    let (sev, fac) = try!(parse_pri_val(prival));
+    let (sev, fac) = parse_pri_val(prival)?;
     let version = take_item!(parse_num(rest, 1, 2), rest);
     //println!("got version {:?}, rest={:?}", version, rest);
     take_char!(rest, ' ');
@@ -333,7 +322,7 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
 
 
 
-/// Parse a string into a SyslogMessage object
+/// Parse a string into a `SyslogMessage` object
 ///
 /// # Arguments
 ///
@@ -341,7 +330,7 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
 ///
 /// # Returns
 ///
-///  * ParseErr if the string is not parseable as an RFC5424 message
+///  * `ParseErr` if the string is not parseable as an RFC5424 message
 ///
 /// # Example
 ///
@@ -352,7 +341,7 @@ fn parse_message_s(m: &str) -> Result<SyslogMessage, ParseErr> {
 ///
 /// assert!(message.hostname.unwrap() == "host1");
 /// ```
-pub fn parse_message<S: AsRef<str>> (s: S) -> Result<SyslogMessage, ParseErr> {
+pub fn parse_message<S: AsRef<str>> (s: S) -> ParseResult<SyslogMessage> {
     parse_message_s(s.as_ref())
 }
 

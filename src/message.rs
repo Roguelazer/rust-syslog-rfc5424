@@ -20,7 +20,7 @@ use facility;
 
 
 #[derive(Clone,Debug,PartialEq,Eq)]
-/// ProcIDs are usually numeric PIDs; however, on some systems, they may be something else
+/// `ProcID`s are usually numeric PIDs; however, on some systems, they may be something else
 pub enum ProcIdType {
     PID(pid_t),
     Name(String)
@@ -46,9 +46,9 @@ pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 
 
 #[derive(Clone,Debug,PartialEq,Eq)]
-/// Container for the StructuredData component of a syslog message.
+/// Container for the `StructuredData` component of a syslog message.
 ///
-/// This is a map from SD_ID to pairs of SD_ParamID, SD_ParamValue
+/// This is a map from `SD_ID` to pairs of `SD_ParamID`, `SD_ParamValue`
 ///
 /// The spec does not forbid repeated keys. However, for convenience, we *do* forbid repeated keys.
 /// That is to say, if you have a message like
@@ -86,7 +86,7 @@ impl StructuredData {
     pub fn insert_tuple<SI, SPI, SPV> (&mut self, sd_id: SI, sd_param_id: SPI, sd_param_value: SPV) -> ()
         where SI: Into<SDIDType>, SPI: Into<SDParamIDType>, SPV: Into<SDParamValueType>
     {
-        let mut sub_map = self.elements.entry(sd_id.into()).or_insert(BTreeMap::new());
+        let sub_map = self.elements.entry(sd_id.into()).or_insert_with(BTreeMap::new);
         sub_map.insert(sd_param_id.into(), sd_param_value.into());
     }
 
@@ -115,6 +115,12 @@ impl StructuredData {
     pub fn len(&self) -> usize
     {
         self.elements.len()
+    }
+
+    /// Whether or not this is empty
+    pub fn is_empty(&self) -> bool
+    {
+        self.elements.is_empty()
     }
 }
 
