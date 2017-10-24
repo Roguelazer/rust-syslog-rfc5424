@@ -35,6 +35,13 @@ extern crate assert_matches;
 extern crate time;
 #[cfg(feature = "rustc-serialize")]
 extern crate rustc_serialize;
+#[cfg(feature = "serde-serialize")]
+extern crate serde;
+#[cfg(feature = "serde-serialize")]
+#[macro_use]
+extern crate serde_derive;
+#[cfg(feature = "serde-serialize")]
+extern crate serde_json;
 
 pub mod message;
 mod severity;
