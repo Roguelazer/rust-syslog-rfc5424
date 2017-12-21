@@ -1,7 +1,3 @@
-#[cfg(feature = "rustc-serialize")]
-use rustc_serialize::{Encodable,Encoder};
-
-#[cfg(feature="serde-serialize")]
 use serde::{Serializer, Serialize};
 
 #[derive(Copy,Clone,Debug,PartialEq)]
@@ -98,17 +94,6 @@ impl SyslogFacility {
     }
 }
 
-
-#[cfg(feature = "rustc-serialize")]
-impl Encodable for SyslogFacility {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
-    {
-        s.emit_str(self.as_str())
-    }
-}
-
-
-#[cfg(feature = "serde-serialize")]
 impl Serialize for SyslogFacility {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(self.as_str())
