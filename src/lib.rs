@@ -11,7 +11,7 @@
 //! A simple syslog server
 //!
 //! ```no_run
-//! use syslog_rfc5424::parse_message;
+//! use syslog_rfc3164::parse_message;
 //! use std::net::UdpSocket;
 //! use std::str;
 //!
@@ -33,14 +33,9 @@
 #[cfg(test)]
 extern crate assert_matches;
 extern crate time;
-#[cfg(feature = "rustc-serialize")]
-extern crate rustc_serialize;
-#[cfg(feature = "serde-serialize")]
 extern crate serde;
-#[cfg(feature = "serde-serialize")]
 #[macro_use]
 extern crate serde_derive;
-#[cfg(feature = "serde-serialize")]
 extern crate serde_json;
 
 pub mod message;
