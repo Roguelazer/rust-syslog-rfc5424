@@ -1,3 +1,7 @@
+0.4.2 (2018-05-15)
+------------------
+- Make `docs.rs` build with all features
+
 0.4.1 (2018-05-15)
 ------------------
 - Fix bug parsing message with non-empty SD fields but empty message body
