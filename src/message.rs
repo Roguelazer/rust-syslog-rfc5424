@@ -41,17 +41,6 @@ impl PartialOrd for ProcId {
 }
 
 
-#[cfg(feature = "rustc-serialize")]
-impl Encodable for ProcId {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        match *self {
-            ProcId::PID(ref p) => s.emit_i32(*p),
-            ProcId::Name(ref n) => s.emit_str(n),
-        }
-    }
-}
-
-
 #[cfg(feature = "serde-serialize")]
 impl Serialize for ProcId {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
@@ -92,12 +81,6 @@ impl ops::Deref for StructuredData {
     }
 }
 
-#[cfg(feature = "rustc-serialize")]
-impl Encodable for StructuredData {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error> {
-        self.elements.encode(s)
-    }
-}
 
 #[cfg(feature = "serde-serialize")]
 impl Serialize for StructuredData {
