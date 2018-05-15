@@ -3,9 +3,10 @@ use std::str::FromStr;
 use std::str;
 use std::num;
 use std::string;
+use std::fmt;
+use std::error::Error;
 
 use time;
-
 
 use severity;
 use facility;
@@ -25,6 +26,27 @@ pub enum ParseErr {
     ExpectedTokenErr(char),
     IntConversionErr(num::ParseIntError),
     MissingField(&'static str)
+}
+
+impl fmt::Display for ParseErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        <Self as fmt::Debug>::fmt(self, f)
+    }
+}
+
+impl Error for ParseErr {
+    fn description(&self) -> &'static str {
+        "error parsing RFC5424 syslog message"
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            ParseErr::BaseUnicodeError(ref e) => Some(e),
+            ParseErr::UnicodeError(ref e) => Some(e),
+            ParseErr::IntConversionErr(ref e) => Some(e),
+            _ => None,
+        }
+    }
 }
 
 // We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
@@ -171,15 +193,16 @@ fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
         return Ok((sd, &structured_data_raw[1..]))
     }
     let mut rest = structured_data_raw;
-    loop {
+    while rest.len() > 0 {
         let (sd_id, params) = take_item!(parse_sde(rest), rest);
         for (sd_param_id, sd_param_value) in params {
             sd.insert_tuple(sd_id.clone(), sd_param_id, sd_param_value);
         }
         if rest.starts_with(' ') {
-            return Ok((sd, rest));
+            break
         }
     }
+    return Ok((sd, rest));
 }
 
 fn parse_pri_val(pri: i32) -> ParseResult<(severity::SyslogSeverity, facility::SyslogFacility)> {
@@ -348,6 +371,8 @@ pub fn parse_message<S: AsRef<str>> (s: S) -> ParseResult<SyslogMessage> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::parse_message;
     use message;
 
@@ -458,5 +483,28 @@ mod tests {
 
         let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003-07:00 host - - - -");
         assert!(msg.is_err(), "expected parse fail");
+    }
+
+    #[test]
+    fn test_empty_sd_value() {
+        let msg = parse_message(r#"<29>1 2018-05-14T08:23:01.520Z leyal_test4 mgd 13894 UI_CHILD_EXITED [junos@2636.1.1.1.2.57 pid="14374" return-value="5" core-dump-status="" command="/usr/sbin/mustd"]"#).expect("must parse");
+        assert_eq!(msg.facility, SyslogFacility::LOG_DAEMON);
+        assert_eq!(msg.severity, SyslogSeverity::SEV_NOTICE);
+        assert_eq!(msg.hostname, Some(String::from("leyal_test4")));
+        assert_eq!(msg.appname, Some(String::from("mgd")));
+        assert_eq!(msg.procid, Some(message::ProcIdType::PID(13894)));
+        assert_eq!(msg.msg, String::from(""));
+        assert_eq!(msg.timestamp, Some(1526286181));
+        assert_eq!(msg.sd.len(), 1);
+        let sd = msg.sd.find_sdid("junos@2636.1.1.1.2.57").expect("should contain root SD");
+        let expected = {
+            let mut expected = BTreeMap::new();
+            expected.insert("pid", "14374");
+            expected.insert("return-value", "5");
+            expected.insert("core-dump-status", "");
+            expected.insert("command", "/usr/sbin/mustd");
+            expected.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<BTreeMap<_, _>>()
+        };
+        assert_eq!(sd, &expected);
     }
 }
