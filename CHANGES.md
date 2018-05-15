@@ -1,3 +1,7 @@
+0.5.1 (2018-05-15)
+------------------
+- Allow terms (hostnames, appnames) to start with a hyphen
+
 0.5.0 (2018-05-15)
 ------------------
 - Remove `Severity::from_int`

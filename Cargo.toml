@@ -1,6 +1,6 @@
 [package]
 name = "syslog_rfc5424"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["James Brown <roguelazer@roguelazer.com>"]
 description = "Parser for RFC5424 (IETF-format) syslog messages"
 documentation = "https://docs.rs/syslog_rfc5424/"
