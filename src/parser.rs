@@ -273,7 +273,7 @@ fn parse_term(m: &str,
               min_length: usize,
               max_length: usize)
               -> ParseResult<(Option<String>, &str)> {
-    if m.starts_with('-') {
+    if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
         return Ok((None, &m[1..]));
     }
     let byte_ary = m.as_bytes();
@@ -371,8 +371,9 @@ pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::mem;
 
-    use super::parse_message;
+    use super::{parse_message, ParseErr};
     use message;
 
     use facility::SyslogFacility;
@@ -512,5 +513,20 @@ mod tests {
                 .collect::<BTreeMap<_, _>>()
         };
         assert_eq!(sd, &expected);
+    }
+
+    #[test]
+    fn test_fields_start_with_dash() {
+        let msg = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -201805020050-bc5d6a47c3-master - - [meta sequenceId=\"28485532\"] 25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"").expect("should parse");
+        assert_eq!(msg.hostname, Some("-web1west".to_string()));
+        assert_eq!(msg.appname, Some("-201805020050-bc5d6a47c3-master".to_string()));
+        assert_eq!(msg.sd.find_tuple("meta", "sequenceId"), Some(&"28485532".to_string()));
+        assert_eq!(msg.msg, "25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"".to_string());
+    }
+
+    #[test]
+    fn test_truncated() {
+        let err = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
+        assert_eq!(mem::discriminant(&err), mem::discriminant(&ParseErr::UnexpectedEndOfInput));
     }
 }
