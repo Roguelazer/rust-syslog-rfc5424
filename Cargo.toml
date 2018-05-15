@@ -27,3 +27,6 @@ serde-serialize = ["serde", "serde_derive", "serde_json"]
 
 [badges]
 travis-ci = { repository = "Roguelazer/rust-syslog-rfc5424" }
+
+[package.metadata.docs.rs]
+all-features = true
