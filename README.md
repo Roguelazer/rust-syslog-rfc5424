@@ -1,8 +1,8 @@
 This module implements an [RFC 5424](https://tools.ietf.org/html/rfc5424) IETF Syslog Protocol parser in Rust.
 
 [![Build Status](https://travis-ci.org/Roguelazer/rust-syslog-rfc5424.svg?branch=master)](https://travis-ci.org/Roguelazer/rust-syslog-rfc5424)
-
-[Documentation](http://roguelazer.github.io/rust-syslog-rfc5424/syslog_rfc5424/)
+[![Documentation](https://docs.rs/syslog_rfc5424/badge.svg)](https://docs.rs/syslog_rfc5424)
+[![crates.io](https://img.shields.io/crates/v/syslog_rfc5424.svg)](https://crates.io/crates/syslog_rfc5424)
 
 This tool supports serializing the parsed messages using rustc-serialize if it's built with the `rustc-serialize`
 feature and using serde if it's built with the `serde-serialize` feature.
