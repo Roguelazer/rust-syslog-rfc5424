@@ -1,3 +1,12 @@
+0.5.0 (2018-05-15)
+------------------
+- Remove `Severity::from_int`
+- Rename `ProcIdType` to `ProcId`
+- Remove rustc-serialize
+- Implement `FromStr` for `SyslogMessage`, allowing more idiomatic parsing
+- Implement Ord/PartialOrd/Eq/PartialEq in more places
+- Make clippy and rustfmt happy
+
 0.4.2 (2018-05-15)
 ------------------
 - Make `docs.rs` build with all features

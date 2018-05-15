@@ -1,33 +1,13 @@
 #[macro_use]
 extern crate timeit;
 extern crate syslog_rfc5424;
-#[cfg(feature = "rustc-serialize")]
-extern crate rustc_serialize;
 #[cfg(feature = "serde-serialize")]
 extern crate serde_json;
 
 use syslog_rfc5424::parse_message;
-#[cfg(feature = "rustc-serialize")]
-use rustc_serialize::json;
 
 // Stupid benchmark tool using the timeit! macro because the official benchmarking tools are
 // **still* nightly-Rust-only, even though they're, like, a year old
-
-#[cfg(feature = "rustc-serialize")]
-fn bench_rustc_serialize() {
-    println!("Parsing an average message and encoding it to json with rustc-serialize");
-    let average_message = r#"<29>1 2016-02-21T04:32:57+00:00 web1 someservice - - [origin x-service="someservice"][meta sequenceId="14125553"] 127.0.0.1 - - 1456029177 "GET /v1/ok HTTP/1.1" 200 145 "-" "hacheck 0.9.0" 24306 127.0.0.1:40124 575"#;
-    timeit!({
-        let m = parse_message(average_message).unwrap();
-        json::encode(&m).unwrap();
-    });
-
-    let average_message = r#"<14>1 2017-07-26T14:47:35.869952+05:30 my_hostname custom_appname 5678 some_unique_msgid - \u{feff}Some other message"#;
-    timeit!({
-        let m = parse_message(average_message).unwrap();
-        json::encode(&m).unwrap();
-    });
-}
 
 #[cfg(feature = "serde-serialize")]
 fn bench_serde() {
@@ -66,8 +46,6 @@ fn main() {
     timeit!({
         parse_message(average_message).unwrap();
     });
-    #[cfg(feature="rustc-serialize")]
-    bench_rustc_serialize();
     #[cfg(feature="serde-serialize")]
     bench_serde();
 }

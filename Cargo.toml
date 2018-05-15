@@ -1,6 +1,6 @@
 [package]
 name = "syslog_rfc5424"
-version = "0.4.2"
+version = "0.5.0"
 authors = ["James Brown <roguelazer@roguelazer.com>"]
 description = "Parser for RFC5424 (IETF-format) syslog messages"
 documentation = "https://docs.rs/syslog_rfc5424/"
@@ -14,7 +14,6 @@ time = "^0.1"
 # this should be a dev dependency, but there's some kind of issue with
 # dev-only macro crates
 assert_matches = "1.0"
-rustc-serialize = { version = "^0.3", optional = true }
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }

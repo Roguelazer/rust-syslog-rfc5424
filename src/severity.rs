@@ -1,10 +1,7 @@
-#[cfg(feature = "rustc-serialize")]
-use rustc_serialize::{Encodable,Encoder};
-
 #[cfg(feature="serde-serialize")]
 use serde::{Serializer, Serialize};
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord)]
 #[allow(non_camel_case_types)]
 /// Syslog Severities from RFC 5424.
 pub enum SyslogSeverity {
@@ -23,7 +20,7 @@ impl SyslogSeverity {
     ///
     /// Returns an Option, but the wire protocol will only include 0..7, so should
     /// never return None in practical usage.
-    pub fn from_int(i: i32) -> Option<Self> {
+    pub(crate) fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(SyslogSeverity::SEV_EMERG),
             1 => Some(SyslogSeverity::SEV_ALERT),
@@ -52,15 +49,6 @@ impl SyslogSeverity {
     }
 }
 
-
-
-#[cfg(feature = "rustc-serialize")]
-impl Encodable for SyslogSeverity {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
-    {
-        s.emit_str(self.as_str())
-    }
-}
 
 
 #[cfg(feature = "serde-serialize")]

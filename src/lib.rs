@@ -11,7 +11,7 @@
 //! A simple syslog server
 //!
 //! ```no_run
-//! use syslog_rfc5424::parse_message;
+//! use syslog_rfc5424::SyslogMessage;
 //! use std::net::UdpSocket;
 //! use std::str;
 //!
@@ -19,7 +19,7 @@
 //! let mut buf = [0u8; 2048];
 //! loop {
 //!     let (data_read, _) = s.recv_from(&mut buf).unwrap();
-//!     let msg = parse_message(str::from_utf8(&buf[0..data_read]).unwrap()).unwrap();
+//!     let msg = str::from_utf8(&buf[0..data_read]).unwrap().parse::<SyslogMessage>().unwrap();
 //!     println!("{:?} {:?} {:?} {:?}", msg.facility, msg.severity, msg.hostname, msg.msg);
 //! }
 //! ```
@@ -52,3 +52,4 @@ pub use severity::SyslogSeverity;
 pub use facility::SyslogFacility;
 
 pub use parser::parse_message;
+pub use message::SyslogMessage;

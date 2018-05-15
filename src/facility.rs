@@ -1,10 +1,7 @@
-#[cfg(feature = "rustc-serialize")]
-use rustc_serialize::{Encodable,Encoder};
-
 #[cfg(feature="serde-serialize")]
 use serde::{Serializer, Serialize};
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Copy,Clone,Debug,PartialEq, Eq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
 /// Syslog facilities. Taken From RFC 5424, but I've heard that some platforms mix these around.
 /// Names are from Linux.
@@ -37,7 +34,7 @@ pub enum SyslogFacility {
 
 impl SyslogFacility {
     /// Convert an int (as used in the wire serialization) into a `SyslogFacility`
-    pub fn from_int(i: i32) -> Option<Self> {
+    pub(crate) fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(SyslogFacility::LOG_KERN),
             1 => Some(SyslogFacility::LOG_USER),
@@ -95,15 +92,6 @@ impl SyslogFacility {
             SyslogFacility::LOG_LOCAL6 => "local6",
             SyslogFacility::LOG_LOCAL7 => "local7",
         }
-    }
-}
-
-
-#[cfg(feature = "rustc-serialize")]
-impl Encodable for SyslogFacility {
-    fn encode<S: Encoder>(&self, s: &mut S) -> Result<(), S::Error>
-    {
-        s.emit_str(self.as_str())
     }
 }
 

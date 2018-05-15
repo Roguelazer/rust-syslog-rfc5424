@@ -10,7 +10,7 @@ use time;
 
 use severity;
 use facility;
-use message::{time_t,SyslogMessage,ProcIdType,StructuredData};
+use message::{time_t, SyslogMessage, ProcId, StructuredData};
 
 #[derive(Debug)]
 pub enum ParseErr {
@@ -25,7 +25,7 @@ pub enum ParseErr {
     UnicodeError(string::FromUtf8Error),
     ExpectedTokenErr(char),
     IntConversionErr(num::ParseIntError),
-    MissingField(&'static str)
+    MissingField(&'static str),
 }
 
 impl fmt::Display for ParseErr {
@@ -85,11 +85,9 @@ macro_rules! take_char {
         $e = match $e.chars().next() {
             Some($c) => &$e[1..],
             Some(_) => {
-                //println!("Error with rest={:?}", $e);
                 return Err(ParseErr::ExpectedTokenErr($c));
             },
             None => {
-                //println!("Error with rest={:?}", $e);
                 return Err(ParseErr::UnexpectedEndOfInput);
             }
         }
@@ -97,7 +95,8 @@ macro_rules! take_char {
 }
 
 fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
-    where F: Fn(char) -> bool {
+    where F: Fn(char) -> bool
+{
 
     for (idx, chr) in input.char_indices() {
         if !f(chr) {
@@ -114,7 +113,7 @@ fn parse_sd_id(input: &str) -> ParseResult<(String, &str)> {
     let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
     Ok((String::from(res), match rest {
         Some(s) => s,
-        None => { return Err(ParseErr::UnexpectedEndOfInput); }
+        None => return Err(ParseErr::UnexpectedEndOfInput)
     }))
 }
 
@@ -190,19 +189,19 @@ fn parse_sde(sde: &str) -> ParseResult<((String, ParsedSDParams), &str)> {
 fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
     let mut sd = StructuredData::new_empty();
     if structured_data_raw.starts_with('-') {
-        return Ok((sd, &structured_data_raw[1..]))
+        return Ok((sd, &structured_data_raw[1..]));
     }
     let mut rest = structured_data_raw;
-    while rest.len() > 0 {
+    while !rest.is_empty() {
         let (sd_id, params) = take_item!(parse_sde(rest), rest);
         for (sd_param_id, sd_param_value) in params {
             sd.insert_tuple(sd_id.clone(), sd_param_id, sd_param_value);
         }
         if rest.starts_with(' ') {
-            break
+            break;
         }
     }
-    return Ok((sd, rest));
+    Ok((sd, rest))
 }
 
 fn parse_pri_val(pri: i32) -> ParseResult<(severity::SyslogSeverity, facility::SyslogFacility)> {
@@ -226,7 +225,7 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
 fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
     let mut rest = m;
     if rest.starts_with('-') {
-        return Ok((None, &rest[1..]))
+        return Ok((None, &rest[1..]));
     }
     let mut tm = time::empty_tm();
     tm.tm_year = take_item!(parse_num(rest, 4, 4), rest) - 1900;
@@ -250,12 +249,14 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
         Some('Z') => {
             rest = &rest[1..];
             0
-        },
+        }
         Some(c) => {
             let (sign, irest) = match c {
                 '+' => (1, &rest[1..]),
                 '-' => (-1, &rest[1..]),
-                _ => { return Err(ParseErr::InvalidUTCOffset); }
+                _ => {
+                    return Err(ParseErr::InvalidUTCOffset);
+                }
             };
             let hours = i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
             let minutes = i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
@@ -268,13 +269,15 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
     Ok((Some(tm.to_utc().to_timespec().sec), rest))
 }
 
-fn parse_term(m: &str, min_length: usize, max_length: usize) -> ParseResult<(Option<String>, &str)> {
+fn parse_term(m: &str,
+              min_length: usize,
+              max_length: usize)
+              -> ParseResult<(Option<String>, &str)> {
     if m.starts_with('-') {
-        return Ok((None, &m[1..]))
+        return Ok((None, &m[1..]));
     }
     let byte_ary = m.as_bytes();
     for (idx, chr) in byte_ary.iter().enumerate() {
-        //println!("idx={:?}, buf={:?}, chr={:?}", idx, buf, chr);
         if *chr < 33 || *chr > 126 {
             if idx < min_length {
                 return Err(ParseErr::TooFewDigits);
@@ -298,49 +301,45 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     take_char!(rest, '>');
     let (sev, fac) = parse_pri_val(prival)?;
     let version = take_item!(parse_num(rest, 1, 2), rest);
-    //println!("got version {:?}, rest={:?}", version, rest);
     take_char!(rest, ' ');
     let timestamp = take_item!(parse_timestamp(rest), rest);
-    //println!("got timestamp {:?}, rest={:?}", timestamp, rest);
     take_char!(rest, ' ');
     let hostname = take_item!(parse_term(rest, 1, 255), rest);
-    //println!("got hostname {:?}, rest={:?}", hostname, rest);
     take_char!(rest, ' ');
     let appname = take_item!(parse_term(rest, 1, 48), rest);
-    //println!("got appname {:?}, rest={:?}", appname, rest);
     take_char!(rest, ' ');
     let procid_r = take_item!(parse_term(rest, 1, 128), rest);
     let procid = match procid_r {
         None => None,
-        Some(s) => Some(match i32::from_str(&s) {
-            Ok(n) => ProcIdType::PID(n),
-            Err(_) => ProcIdType::Name(s)
-        })
+        Some(s) => {
+            Some(match i32::from_str(&s) {
+                     Ok(n) => ProcId::PID(n),
+                     Err(_) => ProcId::Name(s),
+                 })
+        }
     };
-    //println!("got procid {:?}, rest={:?}", procid, rest);
     take_char!(rest, ' ');
     let msgid = take_item!(parse_term(rest, 1, 32), rest);
     take_char!(rest, ' ');
     let sd = take_item!(parse_sd(rest), rest);
-    //println!("got sd {:?}, rest={:?}", sd, rest);
     rest = match maybe_expect_char!(rest, ' ') {
         Some(r) => r,
-        None => rest
+        None => rest,
     };
     let msg = String::from(rest);
 
     Ok(SyslogMessage {
-        severity: sev,
-        facility: fac,
-        version: version,
-        timestamp: timestamp,
-        hostname: hostname,
-        appname: appname,
-        procid: procid,
-        msgid: msgid,
-        sd: sd,
-        msg: msg
-    })
+       severity: sev,
+       facility: fac,
+       version,
+       timestamp,
+       hostname,
+       appname,
+       procid,
+       msgid,
+       sd,
+       msg,
+   })
 }
 
 
@@ -364,7 +363,7 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
 ///
 /// assert!(message.hostname.unwrap() == "host1");
 /// ```
-pub fn parse_message<S: AsRef<str>> (s: S) -> ParseResult<SyslogMessage> {
+pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage> {
     parse_message_s(s.as_ref())
 }
 
@@ -417,7 +416,7 @@ mod tests {
         assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
         assert_eq!(msg.hostname, Some(String::from("host1")));
         assert_eq!(msg.appname, Some(String::from("CROND")));
-        assert_eq!(msg.procid, Some(message::ProcIdType::PID(10391)));
+        assert_eq!(msg.procid, Some(message::ProcId::PID(10391)));
         assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 1);
@@ -432,22 +431,27 @@ mod tests {
         assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
         assert_eq!(msg.hostname, Some(String::from("host1")));
         assert_eq!(msg.appname, Some(String::from("CROND")));
-        assert_eq!(msg.procid, Some(message::ProcIdType::PID(10391)));
+        assert_eq!(msg.procid, Some(message::ProcId::PID(10391)));
         assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 2);
-        assert_eq!(msg.sd.find_sdid("meta").expect("should contain meta").len(), 3);
+        assert_eq!(msg.sd
+                       .find_sdid("meta")
+                       .expect("should contain meta")
+                       .len(),
+                   3);
     }
 
     #[test]
     fn test_sd_with_escaped_quote() {
         let msg_text = r#"<1>1 - - - - - [meta key="val\"ue"] message"#;
         let msg = parse_message(msg_text).expect("should parse");
-        assert_eq!(msg.sd.find_tuple("meta", "key").expect("Should contain meta key"), r#"val"ue"#);
+        assert_eq!(msg.sd.find_tuple("meta", "key").expect("Should contain meta key"),
+                   r#"val"ue"#);
     }
 
     #[test]
-    fn test_other_message() { 
+    fn test_other_message() {
         let msg_text = r#"<190>1 2016-02-21T01:19:11+00:00 batch6sj - - - [meta sequenceId="21881798" x-group="37051387"][origin x-service="tracking"] metascutellar conversationalist nephralgic exogenetic graphy streng outtaken acouasm amateurism prenotice Lyonese bedull antigrammatical diosphenol gastriloquial bayoneteer sweetener naggy roughhouser dighter addend sulphacid uneffectless ferroprussiate reveal Mazdaist plaudite Australasian distributival wiseman rumness Seidel topazine shahdom sinsion mesmerically pinguedinous ophthalmotonometer scuppler wound eciliate expectedly carriwitchet dictatorialism bindweb pyelitic idic atule kokoon poultryproof rusticial seedlip nitrosate splenadenoma holobenthic uneternal Phocaean epigenic doubtlessly indirection torticollar robomb adoptedly outspeak wappenschawing talalgia Goop domitic savola unstrafed carded unmagnified mythologically orchester obliteration imperialine undisobeyed galvanoplastical cycloplegia quinquennia foremean umbonal marcgraviaceous happenstance theoretical necropoles wayworn Igbira pseudoangelic raising unfrounced lamasary centaurial Japanolatry microlepidoptera"#;
         parse_message(msg_text).expect("should parse as text");
     }
@@ -492,7 +496,7 @@ mod tests {
         assert_eq!(msg.severity, SyslogSeverity::SEV_NOTICE);
         assert_eq!(msg.hostname, Some(String::from("leyal_test4")));
         assert_eq!(msg.appname, Some(String::from("mgd")));
-        assert_eq!(msg.procid, Some(message::ProcIdType::PID(13894)));
+        assert_eq!(msg.procid, Some(message::ProcId::PID(13894)));
         assert_eq!(msg.msg, String::from(""));
         assert_eq!(msg.timestamp, Some(1526286181));
         assert_eq!(msg.sd.len(), 1);
@@ -503,7 +507,9 @@ mod tests {
             expected.insert("return-value", "5");
             expected.insert("core-dump-status", "");
             expected.insert("command", "/usr/sbin/mustd");
-            expected.into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<BTreeMap<_, _>>()
+            expected.into_iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect::<BTreeMap<_, _>>()
         };
         assert_eq!(sd, &expected);
     }
