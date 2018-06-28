@@ -212,6 +212,7 @@ mod tests {
             facility: LOG_KERN,
             version: 1,
             timestamp: None,
+            timestamp_millis: None,
             hostname: None,
             appname: None,
             procid: None,

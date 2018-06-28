@@ -10,7 +10,7 @@ use time;
 
 use severity;
 use facility;
-use message::{time_t, SyslogMessage, ProcId, StructuredData};
+use message::{SyslogMessage, ProcId, StructuredData};
 
 const NSEC_PER_MS: i32 = 1000000;
 
