@@ -12,6 +12,8 @@ use severity;
 use facility;
 use message::{time_t, SyslogMessage, ProcId, StructuredData};
 
+const NSEC_PER_MS: i32 = 1000000;
+
 #[derive(Debug)]
 pub enum ParseErr {
     RegexDoesNotMatchErr,
@@ -222,7 +224,7 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
     }
 }
 
-fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
+fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
     let mut rest = m;
     if rest.starts_with('-') {
         return Ok((None, &rest[1..]));
@@ -241,7 +243,7 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
     tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
     if rest.starts_with('.') {
         take_char!(rest, '.');
-        take_item!(parse_num(rest, 1, 6), rest);
+        tm.tm_nsec = take_item!(parse_num(rest, 1, 6), rest) * NSEC_PER_MS;
     }
     // Tm::utcoff is totally broken, don't use it.
     let utc_offset_mins = match rest.chars().next() {
@@ -266,7 +268,7 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time_t>, &str)> {
     };
     tm = tm + time::Duration::minutes(i64::from(utc_offset_mins));
     tm.tm_isdst = -1;
-    Ok((Some(tm.to_utc().to_timespec().sec), rest))
+    Ok((Some(tm.to_utc().to_timespec()), rest))
 }
 
 fn parse_term(m: &str,
@@ -302,7 +304,7 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     let (sev, fac) = parse_pri_val(prival)?;
     let version = take_item!(parse_num(rest, 1, 2), rest);
     take_char!(rest, ' ');
-    let timestamp = take_item!(parse_timestamp(rest), rest);
+    let event_time = take_item!(parse_timestamp(rest), rest);
     take_char!(rest, ' ');
     let hostname = take_item!(parse_term(rest, 1, 255), rest);
     take_char!(rest, ' ');
@@ -332,7 +334,8 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
        severity: sev,
        facility: fac,
        version,
-       timestamp,
+       timestamp: event_time.map(|t| t.sec),
+       timestamp_millis: event_time.map(|t| t.nsec / NSEC_PER_MS),
        hostname,
        appname,
        procid,
@@ -500,6 +503,7 @@ mod tests {
         assert_eq!(msg.procid, Some(message::ProcId::PID(13894)));
         assert_eq!(msg.msg, String::from(""));
         assert_eq!(msg.timestamp, Some(1526286181));
+        assert_eq!(msg.timestamp_millis, Some(520));
         assert_eq!(msg.sd.len(), 1);
         let sd = msg.sd.find_sdid("junos@2636.1.1.1.2.57").expect("should contain root SD");
         let expected = {
