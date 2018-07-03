@@ -224,6 +224,19 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
     }
 }
 
+fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
+    parse_num(d, min_digits, max_digits)
+        .map(|(val, s)| {
+            let mut multiplicand = 1;
+            let z = 10 - (d.len() - s.len());
+
+            for i in 1..(z) {
+                multiplicand = multiplicand * 10;
+            }
+            (val * multiplicand, s)
+        })
+}
+
 fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
     let mut rest = m;
     if rest.starts_with('-') {
@@ -243,7 +256,7 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
     tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
     if rest.starts_with('.') {
         take_char!(rest, '.');
-        tm.tm_nsec = take_item!(parse_num(rest, 1, 6), rest) * NSEC_PER_MS;
+        tm.tm_nsec = take_item!(parse_decimal(rest, 1, 6), rest);
     }
     // Tm::utcoff is totally broken, don't use it.
     let utc_offset_mins = match rest.chars().next() {
@@ -480,14 +493,22 @@ mod tests {
         let msg = parse_message("<1>1 1985-04-12T23:20:50.52Z host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482196050));
+        assert_eq!(msg.timestamp_nanos, Some(520000000));
 
         let msg = parse_message("<1>1 1985-04-12T19:20:50.52-04:00 host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482167250));
+        assert_eq!(msg.timestamp_nanos, Some(520000000));
+
+        let msg = parse_message("<1>1 1985-04-12T19:20:50-04:00 host - - - -")
+            .expect("Should parse empty message");
+        assert_eq!(msg.timestamp, Some(482167250));
+        assert_eq!(msg.timestamp_nanos, Some(0));
 
         let msg = parse_message("<1>1 2003-08-24T05:14:15.000003-07:00 host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1061676855));
+        assert_eq!(msg.timestamp_nanos, Some(3000));
 
         let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003-07:00 host - - - -");
         assert!(msg.is_err(), "expected parse fail");
