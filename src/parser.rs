@@ -335,7 +335,7 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
        facility: fac,
        version,
        timestamp: event_time.map(|t| t.sec),
-       timestamp_millis: event_time.map(|t| t.nsec / NSEC_PER_MS),
+       timestamp_nanos: event_time.map(|t| t.nsec),
        hostname,
        appname,
        procid,
@@ -503,7 +503,7 @@ mod tests {
         assert_eq!(msg.procid, Some(message::ProcId::PID(13894)));
         assert_eq!(msg.msg, String::from(""));
         assert_eq!(msg.timestamp, Some(1526286181));
-        assert_eq!(msg.timestamp_millis, Some(520));
+        assert_eq!(msg.timestamp_nanos, Some(520000000));
         assert_eq!(msg.sd.len(), 1);
         let sd = msg.sd.find_sdid("junos@2636.1.1.1.2.57").expect("should contain root SD");
         let expected = {

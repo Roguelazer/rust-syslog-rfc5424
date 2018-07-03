@@ -150,7 +150,7 @@ pub struct SyslogMessage {
     pub facility: facility::SyslogFacility,
     pub version: i32,
     pub timestamp: Option<time_t>,
-    pub timestamp_millis: Option<i32>,
+    pub timestamp_nanos: Option<i32>,
     pub hostname: Option<String>,
     pub appname: Option<String>,
     pub procid: Option<ProcId>,
