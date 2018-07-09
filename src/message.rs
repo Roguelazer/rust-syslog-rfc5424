@@ -212,7 +212,7 @@ mod tests {
             facility: LOG_KERN,
             version: 1,
             timestamp: None,
-            timestamp_millis: None,
+            timestamp_nanos: None,
             hostname: None,
             appname: None,
             procid: None,
@@ -225,7 +225,7 @@ mod tests {
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
         assert_eq!(encoded,
-                   "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"timestamp_millis\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
+                   "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"timestamp_nanos\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
     }
 
     #[test]
