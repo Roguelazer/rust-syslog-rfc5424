@@ -65,8 +65,8 @@ impl SyslogFacility {
     }
 
     /// Convert a syslog facility into a unique string representation
-    pub fn as_str(&self) -> &'static str {
-        match *self {
+    pub fn as_str(self) -> &'static str {
+        match self {
             SyslogFacility::LOG_KERN => "kern",
             SyslogFacility::LOG_USER => "user",
             SyslogFacility::LOG_MAIL => "mail",

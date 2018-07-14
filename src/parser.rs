@@ -12,8 +12,6 @@ use severity;
 use facility;
 use message::{SyslogMessage, ProcId, StructuredData};
 
-const NSEC_PER_MS: i32 = 1000000;
-
 #[derive(Debug)]
 pub enum ParseErr {
     RegexDoesNotMatchErr,
@@ -230,8 +228,8 @@ fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(
             let mut multiplicand = 1;
             let z = 10 - (d.len() - s.len());
 
-            for i in 1..(z) {
-                multiplicand = multiplicand * 10;
+            for _i in 1..(z) {
+                multiplicand *= 10;
             }
             (val * multiplicand, s)
         })

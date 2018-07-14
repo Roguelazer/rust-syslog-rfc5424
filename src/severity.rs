@@ -35,8 +35,8 @@ impl SyslogSeverity {
     }
 
     /// Convert a syslog severity into a unique string representation
-    pub fn as_str(&self) -> &'static str {
-        match *self {
+    pub fn as_str(self) -> &'static str {
+        match self {
             SyslogSeverity::SEV_EMERG => "emerg",
             SyslogSeverity::SEV_ALERT => "alert",
             SyslogSeverity::SEV_CRIT => "crit",
