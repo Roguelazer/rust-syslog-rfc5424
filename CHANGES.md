@@ -1,3 +1,7 @@
+0.6.0 (2018-07-14)
+------------------
+- Parse subsecond part of timestamps and include it as the `timestamp_nanos` field (thanks @bwtril-justin)
+
 0.5.1 (2018-05-15)
 ------------------
 - Allow terms (hostnames, appnames) to start with a hyphen
