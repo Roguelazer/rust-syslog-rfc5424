@@ -150,6 +150,7 @@ pub struct SyslogMessage {
     pub facility: facility::SyslogFacility,
     pub version: i32,
     pub timestamp: Option<time_t>,
+    pub timestamp_nanos: Option<i32>,
     pub hostname: Option<String>,
     pub appname: Option<String>,
     pub procid: Option<ProcId>,
@@ -211,6 +212,7 @@ mod tests {
             facility: LOG_KERN,
             version: 1,
             timestamp: None,
+            timestamp_nanos: None,
             hostname: None,
             appname: None,
             procid: None,
@@ -223,7 +225,7 @@ mod tests {
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
         assert_eq!(encoded,
-                   "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
+                   "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"timestamp_nanos\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
     }
 
     #[test]
