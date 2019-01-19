@@ -6,6 +6,9 @@ This module implements an [RFC 5424](https://tools.ietf.org/html/rfc5424) IETF S
 
 This tool supports serializing the parsed messages using serde if it's built with the `serde-serialize` feature.
 
+
+This library is licensed under the ISC license, a copy of which can be found in [LICENSE.txt](LICENSE.txt)
+
 ## Performance
 
 On a recent system<sup>[1](#sysfootnote)</sup>, a release build takes approximately 8µs to parse an average message and approximately 300ns to parse the smallest legal message. Debug timings are a bit worse -- about 60µs for an average message and about 8µs for the minimal message. A single-threaded Syslog server should be able to parse at least 100,000 messages/s, as long as you run a separate thread for the parser.
