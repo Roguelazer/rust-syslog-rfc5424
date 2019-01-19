@@ -1,3 +1,7 @@
+0.6.1 (2019-01-19)
+------------------
+- Fix sign error in numeric timezone offsets (thanks to @main-- for reporting this on GitHub)
+
 0.6.0 (2018-07-14)
 ------------------
 - Parse subsecond part of timestamps and include it as the `timestamp_nanos` field (thanks @bwtril-justin)
