@@ -265,8 +265,9 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
         }
         Some(c) => {
             let (sign, irest) = match c {
-                '+' => (1, &rest[1..]),
-                '-' => (-1, &rest[1..]),
+                // Note: signs are backwards as per RFC3339
+                '-' => (1, &rest[1..]),
+                '+' => (-1, &rest[1..]),
                 _ => {
                     return Err(ParseErr::InvalidUTCOffset);
                 }
@@ -274,7 +275,7 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
             let hours = i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
             let minutes = i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
             rest = &irest[5..];
-            minutes + hours * 60 * sign
+            minutes * sign + hours * 60 * sign
         }
     };
     tm = tm + time::Duration::minutes(i64::from(utc_offset_mins));
@@ -420,8 +421,16 @@ mod tests {
 
     #[test]
     fn test_with_time_offset_nonzero() {
-        let msg = parse_message("<1>1 2015-01-01T00:00:00+10:00 - - - - -").expect("Should parse empty message");
+        let msg = parse_message("<1>1 2015-01-01T00:00:00-10:00 - - - - -").expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1420106400));
+        // example from RFC 3339
+        let msg1 = parse_message("<1>1 2015-01-01T18:50:00-04:00 - - - - -").expect("Should parse empty message");
+        let msg2 = parse_message("<1>1 2015-01-01T22:50:00Z - - - - -").expect("Should parse empty message");
+        assert_eq!(msg1.timestamp, msg2.timestamp);
+        // example with fractional minutes
+        let msg1 = parse_message("<1>1 2019-01-20T00:46:39+05:45 - - - - -").expect("Should parse empty message");
+        let msg2 = parse_message("<1>1 2019-01-19T11:01:39-08:00 - - - - -").expect("Should parse empty message");
+        assert_eq!(msg1.timestamp, msg2.timestamp);
     }
 
     #[test]
@@ -493,22 +502,22 @@ mod tests {
         assert_eq!(msg.timestamp, Some(482196050));
         assert_eq!(msg.timestamp_nanos, Some(520000000));
 
-        let msg = parse_message("<1>1 1985-04-12T19:20:50.52-04:00 host - - - -")
+        let msg = parse_message("<1>1 1985-04-12T19:20:50.52+04:00 host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482167250));
         assert_eq!(msg.timestamp_nanos, Some(520000000));
 
-        let msg = parse_message("<1>1 1985-04-12T19:20:50-04:00 host - - - -")
+        let msg = parse_message("<1>1 1985-04-12T19:20:50+04:00 host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482167250));
         assert_eq!(msg.timestamp_nanos, Some(0));
 
-        let msg = parse_message("<1>1 2003-08-24T05:14:15.000003-07:00 host - - - -")
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000003+07:00 host - - - -")
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1061676855));
         assert_eq!(msg.timestamp_nanos, Some(3000));
 
-        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003-07:00 host - - - -");
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003+07:00 host - - - -");
         assert!(msg.is_err(), "expected parse fail");
     }
 
