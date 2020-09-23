@@ -1,14 +1,14 @@
 //! In-memory representation of a single Syslog message.
 
-use std::string::String;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::convert::Into;
 use std::ops;
-use std::cmp::Ordering;
 use std::str::FromStr;
+use std::string::String;
 
-#[cfg(feature="serde-serialize")]
-use serde::{Serializer, Serialize};
+#[cfg(feature = "serde-serialize")]
+use serde::{Serialize, Serializer};
 
 #[allow(non_camel_case_types)]
 pub type time_t = i64;
@@ -17,18 +17,16 @@ pub type pid_t = i32;
 #[allow(non_camel_case_types)]
 pub type msgid_t = String;
 
-use severity;
-use facility;
-use parser;
+use crate::facility;
+use crate::parser;
+use crate::severity;
 
-
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// `ProcID`s are usually numeric PIDs; however, on some systems, they may be something else
 pub enum ProcId {
     PID(pid_t),
     Name(String),
 }
-
 
 impl PartialOrd for ProcId {
     fn partial_cmp(&self, other: &ProcId) -> Option<Ordering> {
@@ -39,7 +37,6 @@ impl PartialOrd for ProcId {
         }
     }
 }
-
 
 #[cfg(feature = "serde-serialize")]
 impl Serialize for ProcId {
@@ -55,11 +52,9 @@ pub type SDIDType = String;
 pub type SDParamIDType = String;
 pub type SDParamValueType = String;
 
-
 pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 
-
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// Container for the `StructuredData` component of a syslog message.
 ///
 /// This is a map from `SD_ID` to pairs of `SD_ParamID`, `SD_ParamValue`
@@ -81,7 +76,6 @@ impl ops::Deref for StructuredData {
     }
 }
 
-
 #[cfg(feature = "serde-serialize")]
 impl Serialize for StructuredData {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
@@ -91,29 +85,37 @@ impl Serialize for StructuredData {
 
 impl StructuredData {
     pub fn new_empty() -> Self {
-        StructuredData { elements: BTreeMap::new() }
+        StructuredData {
+            elements: BTreeMap::new(),
+        }
     }
 
     /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
-    pub fn insert_tuple<SI, SPI, SPV>(&mut self,
-                                      sd_id: SI,
-                                      sd_param_id: SPI,
-                                      sd_param_value: SPV)
-                                      -> ()
-        where SI: Into<SDIDType>,
-              SPI: Into<SDParamIDType>,
-              SPV: Into<SDParamValueType>
+    pub fn insert_tuple<SI, SPI, SPV>(
+        &mut self,
+        sd_id: SI,
+        sd_param_id: SPI,
+        sd_param_value: SPV,
+    ) -> ()
+    where
+        SI: Into<SDIDType>,
+        SPI: Into<SDParamIDType>,
+        SPV: Into<SDParamValueType>,
     {
-        let sub_map = self.elements.entry(sd_id.into()).or_insert_with(BTreeMap::new);
+        let sub_map = self
+            .elements
+            .entry(sd_id.into())
+            .or_insert_with(BTreeMap::new);
         sub_map.insert(sd_param_id.into(), sd_param_value.into());
     }
 
     /// Lookup by SDID, SDParamID pair
-    pub fn find_tuple<'b>(&'b self,
-                          sd_id: &str,
-                          sd_param_id: &str)
-                          -> Option<&'b SDParamValueType> {
-        // TODO: use traits to make these based on the public types isntead of &str
+    pub fn find_tuple<'b>(
+        &'b self,
+        sd_id: &str,
+        sd_param_id: &str,
+    ) -> Option<&'b SDParamValueType> {
+        // TODO: use traits to make these based on the public types instead of &str
         if let Some(sub_map) = self.elements.get(sd_id) {
             if let Some(value) = sub_map.get(sd_param_id) {
                 Some(value)
@@ -141,9 +143,8 @@ impl StructuredData {
     }
 }
 
-
 #[cfg_attr(feature = "serde-serialize", derive(Serialize))]
-#[derive(Clone,Debug,PartialEq,Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// A RFC5424-protocol syslog message
 pub struct SyslogMessage {
     pub severity: severity::SyslogSeverity,
@@ -159,7 +160,6 @@ pub struct SyslogMessage {
     pub msg: String,
 }
 
-
 impl FromStr for SyslogMessage {
     type Err = parser::ParseErr;
 
@@ -171,17 +171,16 @@ impl FromStr for SyslogMessage {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "serde-serialize")]
-    use serde_json;
     use super::StructuredData;
     use super::SyslogMessage;
-    #[cfg(feature="serde-serialize")]
-    use severity::SyslogSeverity::*;
-    #[cfg(feature="serde-serialize")]
-    use facility::SyslogFacility::*;
+    #[cfg(feature = "serde-serialize")]
+    use crate::facility::SyslogFacility::*;
+    #[cfg(feature = "serde-serialize")]
+    use crate::severity::SyslogSeverity::*;
+    #[cfg(feature = "serde-serialize")]
+    use serde_json;
 
     #[test]
     fn test_structured_data_basic() {
@@ -200,8 +199,10 @@ mod tests {
         s.insert_tuple("foo", "baz", "bar");
         s.insert_tuple("faa", "bar", "baz");
         let encoded = serde_json::to_string(&s).expect("Should encode to JSON");
-        assert_eq!(encoded,
-                   r#"{"faa":{"bar":"baz"},"foo":{"bar":"baz","baz":"bar"}}"#);
+        assert_eq!(
+            encoded,
+            r#"{"faa":{"bar":"baz"},"foo":{"bar":"baz","baz":"bar"}}"#
+        );
     }
 
     #[cfg(feature = "serde-serialize")]
@@ -241,7 +242,9 @@ mod tests {
 
     #[test]
     fn test_fromstr() {
-        let msg = "<1>1 1985-04-12T23:20:50.52Z host - - - -".parse::<SyslogMessage>().expect("Should parse empty message");
+        let msg = "<1>1 1985-04-12T23:20:50.52Z host - - - -"
+            .parse::<SyslogMessage>()
+            .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482196050));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "syslog_rfc5424"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["James Brown <roguelazer@roguelazer.com>"]
 description = "Parser for RFC5424 (IETF-format) syslog messages"
 documentation = "https://docs.rs/syslog_rfc5424/"
@@ -8,15 +8,14 @@ homepage = "https://github.com/Roguelazer/rust-syslog-rfc5424"
 repository = "https://github.com/Roguelazer/rust-syslog-rfc5424"
 license = "ISC"
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 time = "^0.1"
-# this should be a dev dependency, but there's some kind of issue with
-# dev-only macro crates
-assert_matches = "1.0"
 serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
+thiserror = "1.0"
 
 [dev-dependencies]
 timeit = "0.1"

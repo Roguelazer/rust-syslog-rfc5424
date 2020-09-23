@@ -1,7 +1,11 @@
-#[cfg(feature="serde-serialize")]
-use serde::{Serializer, Serialize};
+#[cfg(feature = "serde-serialize")]
+use serde::{Serialize, Serializer};
 
-#[derive(Copy,Clone,Debug,PartialEq, Eq, Ord, PartialOrd)]
+use std::convert::TryFrom;
+
+use thiserror::Error;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 #[allow(non_camel_case_types)]
 /// Syslog facilities. Taken From RFC 5424, but I've heard that some platforms mix these around.
 /// Names are from Linux.
@@ -32,36 +36,51 @@ pub enum SyslogFacility {
     LOG_LOCAL7 = 23,
 }
 
+#[derive(Debug, Error)]
+pub enum SyslogFacilityError {
+    #[error("integer does not correspond to a known facility")]
+    InvalidInteger,
+}
+
+impl TryFrom<i32> for SyslogFacility {
+    type Error = SyslogFacilityError;
+
+    #[inline(always)]
+    fn try_from(i: i32) -> Result<SyslogFacility, Self::Error> {
+        Ok(match i {
+            0 => SyslogFacility::LOG_KERN,
+            1 => SyslogFacility::LOG_USER,
+            2 => SyslogFacility::LOG_MAIL,
+            3 => SyslogFacility::LOG_DAEMON,
+            4 => SyslogFacility::LOG_AUTH,
+            5 => SyslogFacility::LOG_SYSLOG,
+            6 => SyslogFacility::LOG_LPR,
+            7 => SyslogFacility::LOG_NEWS,
+            8 => SyslogFacility::LOG_UUCP,
+            9 => SyslogFacility::LOG_CRON,
+            10 => SyslogFacility::LOG_AUTHPRIV,
+            11 => SyslogFacility::LOG_FTP,
+            12 => SyslogFacility::LOG_NTP,
+            13 => SyslogFacility::LOG_AUDIT,
+            14 => SyslogFacility::LOG_ALERT,
+            15 => SyslogFacility::LOG_CLOCKD,
+            16 => SyslogFacility::LOG_LOCAL0,
+            17 => SyslogFacility::LOG_LOCAL1,
+            18 => SyslogFacility::LOG_LOCAL2,
+            19 => SyslogFacility::LOG_LOCAL3,
+            20 => SyslogFacility::LOG_LOCAL4,
+            21 => SyslogFacility::LOG_LOCAL5,
+            22 => SyslogFacility::LOG_LOCAL6,
+            23 => SyslogFacility::LOG_LOCAL7,
+            _ => return Err(SyslogFacilityError::InvalidInteger),
+        })
+    }
+}
+
 impl SyslogFacility {
     /// Convert an int (as used in the wire serialization) into a `SyslogFacility`
     pub(crate) fn from_int(i: i32) -> Option<Self> {
-        match i {
-            0 => Some(SyslogFacility::LOG_KERN),
-            1 => Some(SyslogFacility::LOG_USER),
-            2 => Some(SyslogFacility::LOG_MAIL),
-            3 => Some(SyslogFacility::LOG_DAEMON),
-            4 => Some(SyslogFacility::LOG_AUTH),
-            5 => Some(SyslogFacility::LOG_SYSLOG),
-            6 => Some(SyslogFacility::LOG_LPR),
-            7 => Some(SyslogFacility::LOG_NEWS),
-            8 => Some(SyslogFacility::LOG_UUCP),
-            9 => Some(SyslogFacility::LOG_CRON),
-            10 => Some(SyslogFacility::LOG_AUTHPRIV),
-            11 => Some(SyslogFacility::LOG_FTP),
-            12 => Some(SyslogFacility::LOG_NTP),
-            13 => Some(SyslogFacility::LOG_AUDIT),
-            14 => Some(SyslogFacility::LOG_ALERT),
-            15 => Some(SyslogFacility::LOG_CLOCKD),
-            16 => Some(SyslogFacility::LOG_LOCAL0),
-            17 => Some(SyslogFacility::LOG_LOCAL1),
-            18 => Some(SyslogFacility::LOG_LOCAL2),
-            19 => Some(SyslogFacility::LOG_LOCAL3),
-            20 => Some(SyslogFacility::LOG_LOCAL4),
-            21 => Some(SyslogFacility::LOG_LOCAL5),
-            22 => Some(SyslogFacility::LOG_LOCAL6),
-            23 => Some(SyslogFacility::LOG_LOCAL7),
-            _ => None,
-        }
+        Self::try_from(i).ok()
     }
 
     /// Convert a syslog facility into a unique string representation
@@ -95,14 +114,12 @@ impl SyslogFacility {
     }
 }
 
-
 #[cfg(feature = "serde-serialize")]
 impl Serialize for SyslogFacility {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_str(self.as_str())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

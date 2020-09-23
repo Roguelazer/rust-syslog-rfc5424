@@ -6,8 +6,9 @@ This module implements an [RFC 5424](https://tools.ietf.org/html/rfc5424) IETF S
 
 This tool supports serializing the parsed messages using serde if it's built with the `serde-serialize` feature.
 
-
 This library is licensed under the ISC license, a copy of which can be found in [LICENSE.txt](LICENSE.txt)
+
+The minimum supported Rust version for this library is 1.34.
 
 ## Performance
 
