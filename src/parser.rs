@@ -1,52 +1,42 @@
 use std::borrow::Cow;
-use std::str::FromStr;
-use std::str;
 use std::num;
+use std::str;
+use std::str::FromStr;
 use std::string;
-use std::fmt;
-use std::error::Error;
 
+use thiserror::Error;
 use time;
 
-use severity;
-use facility;
-use message::{SyslogMessage, ProcId, StructuredData};
+use crate::facility;
+use crate::message::{ProcId, StructuredData, SyslogMessage};
+use crate::severity;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseErr {
+    #[error("regular expression does not parse")]
     RegexDoesNotMatchErr,
+    #[error("bad severity in message")]
     BadSeverityInPri,
+    #[error("bad facility in message")]
     BadFacilityInPri,
+    #[error("unexpected eof")]
     UnexpectedEndOfInput,
+    #[error("too few digits in numeric field")]
     TooFewDigits,
+    #[error("too many digits in numeric field")]
     TooManyDigits,
+    #[error("invalid UTC offset")]
     InvalidUTCOffset,
-    BaseUnicodeError(str::Utf8Error),
-    UnicodeError(string::FromUtf8Error),
+    #[error("unicode error: {0}")]
+    BaseUnicodeError(#[from] str::Utf8Error),
+    #[error("unicode error: {0}")]
+    UnicodeError(#[from] string::FromUtf8Error),
+    #[error("unexpected input at character {0}")]
     ExpectedTokenErr(char),
-    IntConversionErr(num::ParseIntError),
+    #[error("integer conversion error: {0}")]
+    IntConversionErr(#[from] num::ParseIntError),
+    #[error("missing field {0}")]
     MissingField(&'static str),
-}
-
-impl fmt::Display for ParseErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <Self as fmt::Debug>::fmt(self, f)
-    }
-}
-
-impl Error for ParseErr {
-    fn description(&self) -> &'static str {
-        "error parsing RFC5424 syslog message"
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        match *self {
-            ParseErr::BaseUnicodeError(ref e) => Some(e),
-            ParseErr::UnicodeError(ref e) => Some(e),
-            ParseErr::IntConversionErr(ref e) => Some(e),
-            _ => None,
-        }
-    }
 }
 
 // We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
@@ -63,10 +53,12 @@ impl Error for ParseErr {
 // macros will update that slice as they consume tokens.
 
 macro_rules! maybe_expect_char {
-    ($s:expr, $e: expr) => (match $s.chars().next() {
-        Some($e) => Some(&$s[1..]),
-        _ => None,
-    })
+    ($s:expr, $e: expr) => {
+        match $s.chars().next() {
+            Some($e) => Some(&$s[1..]),
+            _ => None,
+        }
+    };
 }
 
 macro_rules! take_item {
@@ -74,9 +66,8 @@ macro_rules! take_item {
         let (t, r) = $e?;
         $r = r;
         t
-    }}
+    }};
 }
-
 
 type ParseResult<T> = Result<T, ParseErr>;
 
@@ -86,18 +77,18 @@ macro_rules! take_char {
             Some($c) => &$e[1..],
             Some(_) => {
                 return Err(ParseErr::ExpectedTokenErr($c));
-            },
+            }
             None => {
                 return Err(ParseErr::UnexpectedEndOfInput);
             }
         }
-    }}
+    }};
 }
 
 fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
-    where F: Fn(char) -> bool
+where
+    F: Fn(char) -> bool,
 {
-
     for (idx, chr) in input.char_indices() {
         if !f(chr) {
             return (&input[..idx], Some(&input[idx..]));
@@ -111,10 +102,13 @@ fn take_while<F>(input: &str, f: F, max_chars: usize) -> (&str, Option<&str>)
 
 fn parse_sd_id(input: &str) -> ParseResult<(String, &str)> {
     let (res, rest) = take_while(input, |c| c != ' ' && c != '=' && c != ']', 128);
-    Ok((String::from(res), match rest {
-        Some(s) => s,
-        None => return Err(ParseErr::UnexpectedEndOfInput)
-    }))
+    Ok((
+        String::from(res),
+        match rest {
+            Some(s) => s,
+            None => return Err(ParseErr::UnexpectedEndOfInput),
+        },
+    ))
 }
 
 /** Parse a `param_value`... a.k.a. a quoted string */
@@ -218,21 +212,23 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
     } else if res.len() > max_digits {
         Err(ParseErr::TooManyDigits)
     } else {
-        Ok((i32::from_str(res).map_err(ParseErr::IntConversionErr)?, rest))
+        Ok((
+            i32::from_str(res).map_err(ParseErr::IntConversionErr)?,
+            rest,
+        ))
     }
 }
 
 fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
-    parse_num(d, min_digits, max_digits)
-        .map(|(val, s)| {
-            let mut multiplicand = 1;
-            let z = 10 - (d.len() - s.len());
+    parse_num(d, min_digits, max_digits).map(|(val, s)| {
+        let mut multiplicand = 1;
+        let z = 10 - (d.len() - s.len());
 
-            for _i in 1..(z) {
-                multiplicand *= 10;
-            }
-            (val * multiplicand, s)
-        })
+        for _i in 1..(z) {
+            multiplicand *= 10;
+        }
+        (val * multiplicand, s)
+    })
 }
 
 fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
@@ -283,10 +279,11 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
     Ok((Some(tm.to_utc().to_timespec()), rest))
 }
 
-fn parse_term(m: &str,
-              min_length: usize,
-              max_length: usize)
-              -> ParseResult<(Option<String>, &str)> {
+fn parse_term(
+    m: &str,
+    min_length: usize,
+    max_length: usize,
+) -> ParseResult<(Option<String>, &str)> {
     if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
         return Ok((None, &m[1..]));
     }
@@ -307,7 +304,6 @@ fn parse_term(m: &str,
     Err(ParseErr::UnexpectedEndOfInput)
 }
 
-
 fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     let mut rest = m;
     take_char!(rest, '<');
@@ -325,12 +321,10 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     let procid_r = take_item!(parse_term(rest, 1, 128), rest);
     let procid = match procid_r {
         None => None,
-        Some(s) => {
-            Some(match i32::from_str(&s) {
-                     Ok(n) => ProcId::PID(n),
-                     Err(_) => ProcId::Name(s),
-                 })
-        }
+        Some(s) => Some(match i32::from_str(&s) {
+            Ok(n) => ProcId::PID(n),
+            Err(_) => ProcId::Name(s),
+        }),
     };
     take_char!(rest, ' ');
     let msgid = take_item!(parse_term(rest, 1, 32), rest);
@@ -343,21 +337,19 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     let msg = String::from(rest);
 
     Ok(SyslogMessage {
-       severity: sev,
-       facility: fac,
-       version,
-       timestamp: event_time.map(|t| t.sec),
-       timestamp_nanos: event_time.map(|t| t.nsec),
-       hostname,
-       appname,
-       procid,
-       msgid,
-       sd,
-       msg,
-   })
+        severity: sev,
+        facility: fac,
+        version,
+        timestamp: event_time.map(|t| t.sec),
+        timestamp_nanos: event_time.map(|t| t.nsec),
+        hostname,
+        appname,
+        procid,
+        msgid,
+        sd,
+        msg,
+    })
 }
-
-
 
 /// Parse a string into a `SyslogMessage` object
 ///
@@ -382,17 +374,16 @@ pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage> {
     parse_message_s(s.as_ref())
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
     use std::mem;
 
     use super::{parse_message, ParseErr};
-    use message;
+    use crate::message;
 
-    use facility::SyslogFacility;
-    use severity::SyslogSeverity;
+    use crate::facility::SyslogFacility;
+    use crate::severity::SyslogSeverity;
 
     #[test]
     fn test_simple() {
@@ -409,27 +400,34 @@ mod tests {
 
     #[test]
     fn test_with_time_zulu() {
-        let msg = parse_message("<1>1 2015-01-01T00:00:00Z host - - - -").expect("Should parse empty message");
+        let msg = parse_message("<1>1 2015-01-01T00:00:00Z host - - - -")
+            .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1420070400));
     }
 
     #[test]
     fn test_with_time_offset() {
-        let msg = parse_message("<1>1 2015-01-01T00:00:00+00:00 - - - - -").expect("Should parse empty message");
+        let msg = parse_message("<1>1 2015-01-01T00:00:00+00:00 - - - - -")
+            .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1420070400));
     }
 
     #[test]
     fn test_with_time_offset_nonzero() {
-        let msg = parse_message("<1>1 2015-01-01T00:00:00-10:00 - - - - -").expect("Should parse empty message");
+        let msg = parse_message("<1>1 2015-01-01T00:00:00-10:00 - - - - -")
+            .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(1420106400));
         // example from RFC 3339
-        let msg1 = parse_message("<1>1 2015-01-01T18:50:00-04:00 - - - - -").expect("Should parse empty message");
-        let msg2 = parse_message("<1>1 2015-01-01T22:50:00Z - - - - -").expect("Should parse empty message");
+        let msg1 = parse_message("<1>1 2015-01-01T18:50:00-04:00 - - - - -")
+            .expect("Should parse empty message");
+        let msg2 = parse_message("<1>1 2015-01-01T22:50:00Z - - - - -")
+            .expect("Should parse empty message");
         assert_eq!(msg1.timestamp, msg2.timestamp);
         // example with fractional minutes
-        let msg1 = parse_message("<1>1 2019-01-20T00:46:39+05:45 - - - - -").expect("Should parse empty message");
-        let msg2 = parse_message("<1>1 2019-01-19T11:01:39-08:00 - - - - -").expect("Should parse empty message");
+        let msg1 = parse_message("<1>1 2019-01-20T00:46:39+05:45 - - - - -")
+            .expect("Should parse empty message");
+        let msg2 = parse_message("<1>1 2019-01-19T11:01:39-08:00 - - - - -")
+            .expect("Should parse empty message");
         assert_eq!(msg1.timestamp, msg2.timestamp);
     }
 
@@ -444,7 +442,10 @@ mod tests {
         assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 1);
-        let v = msg.sd.find_tuple("meta", "sequenceId").expect("Should contain meta sequenceId");
+        let v = msg
+            .sd
+            .find_tuple("meta", "sequenceId")
+            .expect("Should contain meta sequenceId");
         assert_eq!(v, "29");
     }
 
@@ -459,19 +460,22 @@ mod tests {
         assert_eq!(msg.msg, String::from("some_message"));
         assert_eq!(msg.timestamp, Some(1452816241));
         assert_eq!(msg.sd.len(), 2);
-        assert_eq!(msg.sd
-                       .find_sdid("meta")
-                       .expect("should contain meta")
-                       .len(),
-                   3);
+        assert_eq!(
+            msg.sd.find_sdid("meta").expect("should contain meta").len(),
+            3
+        );
     }
 
     #[test]
     fn test_sd_with_escaped_quote() {
         let msg_text = r#"<1>1 - - - - - [meta key="val\"ue"] message"#;
         let msg = parse_message(msg_text).expect("should parse");
-        assert_eq!(msg.sd.find_tuple("meta", "key").expect("Should contain meta key"),
-                   r#"val"ue"#);
+        assert_eq!(
+            msg.sd
+                .find_tuple("meta", "key")
+                .expect("Should contain meta key"),
+            r#"val"ue"#
+        );
     }
 
     #[test]
@@ -533,14 +537,18 @@ mod tests {
         assert_eq!(msg.timestamp, Some(1526286181));
         assert_eq!(msg.timestamp_nanos, Some(520000000));
         assert_eq!(msg.sd.len(), 1);
-        let sd = msg.sd.find_sdid("junos@2636.1.1.1.2.57").expect("should contain root SD");
+        let sd = msg
+            .sd
+            .find_sdid("junos@2636.1.1.1.2.57")
+            .expect("should contain root SD");
         let expected = {
             let mut expected = BTreeMap::new();
             expected.insert("pid", "14374");
             expected.insert("return-value", "5");
             expected.insert("core-dump-status", "");
             expected.insert("command", "/usr/sbin/mustd");
-            expected.into_iter()
+            expected
+                .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect::<BTreeMap<_, _>>()
         };
@@ -551,14 +559,27 @@ mod tests {
     fn test_fields_start_with_dash() {
         let msg = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -201805020050-bc5d6a47c3-master - - [meta sequenceId=\"28485532\"] 25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"").expect("should parse");
         assert_eq!(msg.hostname, Some("-web1west".to_string()));
-        assert_eq!(msg.appname, Some("-201805020050-bc5d6a47c3-master".to_string()));
-        assert_eq!(msg.sd.find_tuple("meta", "sequenceId"), Some(&"28485532".to_string()));
-        assert_eq!(msg.msg, "25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"".to_string());
+        assert_eq!(
+            msg.appname,
+            Some("-201805020050-bc5d6a47c3-master".to_string())
+        );
+        assert_eq!(
+            msg.sd.find_tuple("meta", "sequenceId"),
+            Some(&"28485532".to_string())
+        );
+        assert_eq!(
+            msg.msg,
+            "25450-uWSGI worker 6: getaddrinfo*.gaih_getanswer: got type \"DNAME\"".to_string()
+        );
     }
 
     #[test]
     fn test_truncated() {
-        let err = parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
-        assert_eq!(mem::discriminant(&err), mem::discriminant(&ParseErr::UnexpectedEndOfInput));
+        let err =
+            parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
+        assert_eq!(
+            mem::discriminant(&err),
+            mem::discriminant(&ParseErr::UnexpectedEndOfInput)
+        );
     }
 }

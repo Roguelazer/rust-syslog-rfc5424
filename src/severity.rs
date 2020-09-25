@@ -1,7 +1,11 @@
-#[cfg(feature="serde-serialize")]
-use serde::{Serializer, Serialize};
+use std::convert::TryFrom;
 
-#[derive(Copy,Clone,Debug,PartialEq,Eq,PartialOrd,Ord)]
+#[cfg(feature = "serde-serialize")]
+use serde::{Serialize, Serializer};
+
+use thiserror::Error;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[allow(non_camel_case_types)]
 /// Syslog Severities from RFC 5424.
 pub enum SyslogSeverity {
@@ -15,23 +19,38 @@ pub enum SyslogSeverity {
     SEV_DEBUG = 7,
 }
 
+#[derive(Debug, Error)]
+pub enum SyslogSeverityError {
+    #[error("integer does not correspond to a known severity")]
+    InvalidInteger,
+}
+
+impl TryFrom<i32> for SyslogSeverity {
+    type Error = SyslogSeverityError;
+
+    #[inline(always)]
+    fn try_from(i: i32) -> Result<SyslogSeverity, Self::Error> {
+        Ok(match i {
+            0 => SyslogSeverity::SEV_EMERG,
+            1 => SyslogSeverity::SEV_ALERT,
+            2 => SyslogSeverity::SEV_CRIT,
+            3 => SyslogSeverity::SEV_ERR,
+            4 => SyslogSeverity::SEV_WARNING,
+            5 => SyslogSeverity::SEV_NOTICE,
+            6 => SyslogSeverity::SEV_INFO,
+            7 => SyslogSeverity::SEV_DEBUG,
+            _ => return Err(SyslogSeverityError::InvalidInteger),
+        })
+    }
+}
+
 impl SyslogSeverity {
     /// Convert an int (as used in the wire serialization) into a `SyslogSeverity`
     ///
     /// Returns an Option, but the wire protocol will only include 0..7, so should
     /// never return None in practical usage.
     pub(crate) fn from_int(i: i32) -> Option<Self> {
-        match i {
-            0 => Some(SyslogSeverity::SEV_EMERG),
-            1 => Some(SyslogSeverity::SEV_ALERT),
-            2 => Some(SyslogSeverity::SEV_CRIT),
-            3 => Some(SyslogSeverity::SEV_ERR),
-            4 => Some(SyslogSeverity::SEV_WARNING),
-            5 => Some(SyslogSeverity::SEV_NOTICE),
-            6 => Some(SyslogSeverity::SEV_INFO),
-            7 => Some(SyslogSeverity::SEV_DEBUG),
-            _ => None,
-        }
+        Self::try_from(i).ok()
     }
 
     /// Convert a syslog severity into a unique string representation
@@ -44,12 +63,10 @@ impl SyslogSeverity {
             SyslogSeverity::SEV_WARNING => "warning",
             SyslogSeverity::SEV_NOTICE => "notice",
             SyslogSeverity::SEV_INFO => "info",
-            SyslogSeverity::SEV_DEBUG => "debug"
+            SyslogSeverity::SEV_DEBUG => "debug",
         }
     }
 }
-
-
 
 #[cfg(feature = "serde-serialize")]
 impl Serialize for SyslogSeverity {
@@ -57,7 +74,6 @@ impl Serialize for SyslogSeverity {
         ser.serialize_str(self.as_str())
     }
 }
-
 
 #[cfg(test)]
 mod tests {
