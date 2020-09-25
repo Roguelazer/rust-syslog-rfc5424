@@ -1,3 +1,10 @@
+0.7.0 (2020-09-24)
+------------------
+- Bump to Rust 2018 edition
+- Bump MSRV to 1.34
+- Add public `TryFrom` implementations for severity and facility (requested in #16)
+- rustfmt/clippyize/etc
+
 0.6.1 (2019-01-19)
 ------------------
 - Fix sign error in numeric timezone offsets (thanks to @main-- for reporting this on GitHub)
