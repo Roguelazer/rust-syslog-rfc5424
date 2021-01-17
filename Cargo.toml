@@ -24,6 +24,7 @@ serde-serialize = ["serde", "serde_derive", "serde_json", "indexmap/serde-1"]
 [dev-dependencies]
 timeit = "0.1"
 fxhash = "0.2"
+clap = "2"
 
 [badges]
 travis-ci = { repository = "Roguelazer/rust-syslog-rfc5424" }
