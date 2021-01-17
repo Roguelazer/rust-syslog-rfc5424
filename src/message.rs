@@ -1,11 +1,17 @@
 //! In-memory representation of a single Syslog message.
 
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
 use std::convert::Into;
 use std::ops;
 use std::str::FromStr;
 use std::string::String;
+
+#[cfg(feature = "fastmap")]
+use fxhash::FxBuildHasher;
+#[cfg(feature = "fastmap")]
+use indexmap::IndexMap;
+#[cfg(not(feature = "fastmap"))]
+use std::collections::BTreeMap;
 
 #[cfg(feature = "serde-serialize")]
 use serde::{Serialize, Serializer};
@@ -20,6 +26,10 @@ pub type msgid_t = String;
 use crate::facility;
 use crate::parser;
 use crate::severity;
+
+pub type SDIDType = String;
+pub type SDParamIDType = String;
+pub type SDParamValueType = String;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// `ProcID`s are usually numeric PIDs; however, on some systems, they may be something else
@@ -48,10 +58,9 @@ impl Serialize for ProcId {
     }
 }
 
-pub type SDIDType = String;
-pub type SDParamIDType = String;
-pub type SDParamValueType = String;
-
+#[cfg(feature = "fastmap")]
+pub type StructuredDataElement = IndexMap<SDParamIDType, SDParamValueType, FxBuildHasher>;
+#[cfg(not(feature = "fastmap"))]
 pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -66,11 +75,18 @@ pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
 ///
 /// There's no way to retrieve the original "baz" mapping.
 pub struct StructuredData {
+    #[cfg(feature = "fastmap")]
+    elements: IndexMap<SDIDType, StructuredDataElement, FxBuildHasher>,
+    #[cfg(not(feature = "fastmap"))]
     elements: BTreeMap<SDIDType, StructuredDataElement>,
 }
 
 impl ops::Deref for StructuredData {
+    #[cfg(feature = "fastmap")]
+    type Target = IndexMap<SDIDType, StructuredDataElement, FxBuildHasher>;
+    #[cfg(not(feature = "fastmap"))]
     type Target = BTreeMap<SDIDType, StructuredDataElement>;
+
     fn deref(&self) -> &Self::Target {
         &self.elements
     }
@@ -86,7 +102,7 @@ impl Serialize for StructuredData {
 impl StructuredData {
     pub fn new_empty() -> Self {
         StructuredData {
-            elements: BTreeMap::new(),
+            elements: Default::default(),
         }
     }
 
@@ -105,7 +121,7 @@ impl StructuredData {
         let sub_map = self
             .elements
             .entry(sd_id.into())
-            .or_insert_with(BTreeMap::new);
+            .or_insert_with(Default::default);
         sub_map.insert(sd_param_id.into(), sd_param_value.into());
     }
 
@@ -195,9 +211,9 @@ mod tests {
     #[test]
     fn test_structured_data_serialization_serde() {
         let mut s = StructuredData::new_empty();
+        s.insert_tuple("faa", "bar", "baz");
         s.insert_tuple("foo", "bar", "baz");
         s.insert_tuple("foo", "baz", "bar");
-        s.insert_tuple("faa", "bar", "baz");
         let encoded = serde_json::to_string(&s).expect("Should encode to JSON");
         assert_eq!(
             encoded,

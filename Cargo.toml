@@ -16,12 +16,15 @@ serde = { version = "1.0", optional = true }
 serde_derive = { version = "1.0", optional = true }
 serde_json = { version = "1.0", optional = true }
 thiserror = "1.0"
+indexmap = { version = "1", optional = true }
+fxhash = { version = "0.2", optional = true }
+
+[features]
+serde-serialize = ["serde", "serde_derive", "serde_json", "indexmap/serde-1"]
+fastmap = ["indexmap", "fxhash"]
 
 [dev-dependencies]
 timeit = "0.1"
-
-[features]
-serde-serialize = ["serde", "serde_derive", "serde_json"]
 
 [badges]
 travis-ci = { repository = "Roguelazer/rust-syslog-rfc5424" }

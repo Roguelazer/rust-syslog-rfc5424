@@ -383,6 +383,7 @@ mod tests {
     use crate::message;
 
     use crate::facility::SyslogFacility;
+    use crate::message::StructuredDataElement;
     use crate::severity::SyslogSeverity;
 
     #[test]
@@ -550,7 +551,7 @@ mod tests {
             expected
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<BTreeMap<_, _>>()
+                .collect::<StructuredDataElement>()
         };
         assert_eq!(sd, &expected);
     }
