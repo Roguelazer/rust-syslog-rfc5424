@@ -8,8 +8,9 @@ use thiserror::Error;
 use time;
 
 use crate::facility;
-use crate::message::{ProcId, StructuredData, SyslogMessage};
+use crate::message::{ProcId, SyslogMessage};
 use crate::severity;
+use crate::structured_data::{BTreeStructuredData, StructuredDataMap};
 
 #[derive(Debug, Error)]
 pub enum ParseErr {
@@ -180,8 +181,8 @@ fn parse_sde(sde: &str) -> ParseResult<((String, ParsedSDParams), &str)> {
     Ok(((id, params), rest))
 }
 
-fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
-    let mut sd = StructuredData::new_empty();
+fn parse_sd<S: StructuredDataMap>(structured_data_raw: &str) -> ParseResult<(S, &str)> {
+    let mut sd = Default::default();
     if structured_data_raw.starts_with('-') {
         return Ok((sd, &structured_data_raw[1..]));
     }
@@ -304,7 +305,7 @@ fn parse_term(
     Err(ParseErr::UnexpectedEndOfInput)
 }
 
-fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
+fn parse_message_s<M: StructuredDataMap>(m: &str) -> ParseResult<SyslogMessage<M>> {
     let mut rest = m;
     take_char!(rest, '<');
     let prival = take_item!(parse_num(rest, 1, 3), rest);
@@ -329,7 +330,7 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     take_char!(rest, ' ');
     let msgid = take_item!(parse_term(rest, 1, 32), rest);
     take_char!(rest, ' ');
-    let sd = take_item!(parse_sd(rest), rest);
+    let sd = take_item!(parse_sd::<M>(rest), rest);
     rest = match maybe_expect_char!(rest, ' ') {
         Some(r) => r,
         None => rest,
@@ -370,8 +371,14 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
 ///
 /// assert!(message.hostname.unwrap() == "host1");
 /// ```
-pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage> {
+pub fn parse_message_with<S: AsRef<str>, M: StructuredDataMap>(
+    s: S,
+) -> ParseResult<SyslogMessage<M>> {
     parse_message_s(s.as_ref())
+}
+
+pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage<BTreeStructuredData>> {
+    parse_message_with(s)
 }
 
 #[cfg(test)]
@@ -383,8 +390,8 @@ mod tests {
     use crate::message;
 
     use crate::facility::SyslogFacility;
-    use crate::message::StructuredDataElement;
     use crate::severity::SyslogSeverity;
+    use crate::structured_data::StructuredDataMap;
 
     #[test]
     fn test_simple() {
@@ -540,7 +547,9 @@ mod tests {
         assert_eq!(msg.sd.len(), 1);
         let sd = msg
             .sd
-            .find_sdid("junos@2636.1.1.1.2.57")
+            .as_btreemap()
+            .get("junos@2636.1.1.1.2.57")
+            .map(|s| s.to_owned())
             .expect("should contain root SD");
         let expected = {
             let mut expected = BTreeMap::new();
@@ -551,9 +560,9 @@ mod tests {
             expected
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<StructuredDataElement>()
+                .collect::<BTreeMap<_, _>>()
         };
-        assert_eq!(sd, &expected);
+        assert_eq!(sd, expected);
     }
 
     #[test]

@@ -1,17 +1,8 @@
 //! In-memory representation of a single Syslog message.
 
 use std::cmp::Ordering;
-use std::convert::Into;
-use std::ops;
 use std::str::FromStr;
 use std::string::String;
-
-#[cfg(feature = "fastmap")]
-use fxhash::FxBuildHasher;
-#[cfg(feature = "fastmap")]
-use indexmap::IndexMap;
-#[cfg(not(feature = "fastmap"))]
-use std::collections::BTreeMap;
 
 #[cfg(feature = "serde-serialize")]
 use serde::{Serialize, Serializer};
@@ -26,6 +17,7 @@ pub type msgid_t = String;
 use crate::facility;
 use crate::parser;
 use crate::severity;
+use crate::structured_data::{BTreeStructuredData, StructuredDataMap};
 
 pub type SDIDType = String;
 pub type SDParamIDType = String;
@@ -58,111 +50,10 @@ impl Serialize for ProcId {
     }
 }
 
-#[cfg(feature = "fastmap")]
-pub type StructuredDataElement = IndexMap<SDParamIDType, SDParamValueType, FxBuildHasher>;
-#[cfg(not(feature = "fastmap"))]
-pub type StructuredDataElement = BTreeMap<SDParamIDType, SDParamValueType>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-/// Container for the `StructuredData` component of a syslog message.
-///
-/// This is a map from `SD_ID` to pairs of `SD_ParamID`, `SD_ParamValue`
-///
-/// The spec does not forbid repeated keys. However, for convenience, we *do* forbid repeated keys.
-/// That is to say, if you have a message like
-///
-/// [foo bar="baz" bar="bing"]
-///
-/// There's no way to retrieve the original "baz" mapping.
-pub struct StructuredData {
-    #[cfg(feature = "fastmap")]
-    elements: IndexMap<SDIDType, StructuredDataElement, FxBuildHasher>,
-    #[cfg(not(feature = "fastmap"))]
-    elements: BTreeMap<SDIDType, StructuredDataElement>,
-}
-
-impl ops::Deref for StructuredData {
-    #[cfg(feature = "fastmap")]
-    type Target = IndexMap<SDIDType, StructuredDataElement, FxBuildHasher>;
-    #[cfg(not(feature = "fastmap"))]
-    type Target = BTreeMap<SDIDType, StructuredDataElement>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.elements
-    }
-}
-
-#[cfg(feature = "serde-serialize")]
-impl Serialize for StructuredData {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        self.elements.serialize(ser)
-    }
-}
-
-impl StructuredData {
-    pub fn new_empty() -> Self {
-        StructuredData {
-            elements: Default::default(),
-        }
-    }
-
-    /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
-    pub fn insert_tuple<SI, SPI, SPV>(
-        &mut self,
-        sd_id: SI,
-        sd_param_id: SPI,
-        sd_param_value: SPV,
-    ) -> ()
-    where
-        SI: Into<SDIDType>,
-        SPI: Into<SDParamIDType>,
-        SPV: Into<SDParamValueType>,
-    {
-        let sub_map = self
-            .elements
-            .entry(sd_id.into())
-            .or_insert_with(Default::default);
-        sub_map.insert(sd_param_id.into(), sd_param_value.into());
-    }
-
-    /// Lookup by SDID, SDParamID pair
-    pub fn find_tuple<'b>(
-        &'b self,
-        sd_id: &str,
-        sd_param_id: &str,
-    ) -> Option<&'b SDParamValueType> {
-        // TODO: use traits to make these based on the public types instead of &str
-        if let Some(sub_map) = self.elements.get(sd_id) {
-            if let Some(value) = sub_map.get(sd_param_id) {
-                Some(value)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Find all param/value mappings for a given SDID
-    pub fn find_sdid<'b>(&'b self, sd_id: &str) -> Option<&'b StructuredDataElement> {
-        self.elements.get(sd_id)
-    }
-
-    /// The number of distinct SD_IDs
-    pub fn len(&self) -> usize {
-        self.elements.len()
-    }
-
-    /// Whether or not this is empty
-    pub fn is_empty(&self) -> bool {
-        self.elements.is_empty()
-    }
-}
-
 #[cfg_attr(feature = "serde-serialize", derive(Serialize))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// A RFC5424-protocol syslog message
-pub struct SyslogMessage {
+pub struct SyslogMessage<SDType: StructuredDataMap = BTreeStructuredData> {
     pub severity: severity::SyslogSeverity,
     pub facility: facility::SyslogFacility,
     pub version: i32,
@@ -172,24 +63,23 @@ pub struct SyslogMessage {
     pub appname: Option<String>,
     pub procid: Option<ProcId>,
     pub msgid: Option<msgid_t>,
-    pub sd: StructuredData,
+    pub sd: SDType,
     pub msg: String,
 }
 
-impl FromStr for SyslogMessage {
+impl<M: StructuredDataMap> FromStr for SyslogMessage<M> {
     type Err = parser::ParseErr;
 
     /// Parse a string into a `SyslogMessage`
     ///
     /// Just calls `parser::parse_message`
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parser::parse_message(s)
+        parser::parse_message_with(s)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::StructuredData;
     use super::SyslogMessage;
     #[cfg(feature = "serde-serialize")]
     use crate::facility::SyslogFacility::*;
@@ -197,29 +87,7 @@ mod tests {
     use crate::severity::SyslogSeverity::*;
     #[cfg(feature = "serde-serialize")]
     use serde_json;
-
-    #[test]
-    fn test_structured_data_basic() {
-        let mut s = StructuredData::new_empty();
-        s.insert_tuple("foo", "bar", "baz");
-        let v = s.find_tuple("foo", "bar").expect("should find foo/bar");
-        assert_eq!(v, "baz");
-        assert!(s.find_tuple("foo", "baz").is_none());
-    }
-
-    #[cfg(feature = "serde-serialize")]
-    #[test]
-    fn test_structured_data_serialization_serde() {
-        let mut s = StructuredData::new_empty();
-        s.insert_tuple("faa", "bar", "baz");
-        s.insert_tuple("foo", "bar", "baz");
-        s.insert_tuple("foo", "baz", "bar");
-        let encoded = serde_json::to_string(&s).expect("Should encode to JSON");
-        assert_eq!(
-            encoded,
-            r#"{"faa":{"bar":"baz"},"foo":{"bar":"baz","baz":"bar"}}"#
-        );
-    }
+    use std::collections::BTreeMap;
 
     #[cfg(feature = "serde-serialize")]
     #[test]
@@ -234,7 +102,7 @@ mod tests {
             appname: None,
             procid: None,
             msgid: None,
-            sd: StructuredData::new_empty(),
+            sd: BTreeMap::new(),
             msg: String::from(""),
         };
 
@@ -246,21 +114,82 @@ mod tests {
     }
 
     #[test]
-    fn test_deref_structureddata() {
-        let mut s = StructuredData::new_empty();
-        s.insert_tuple("foo", "bar", "baz");
-        s.insert_tuple("foo", "baz", "bar");
-        s.insert_tuple("faa", "bar", "baz");
-        assert_eq!("baz", s.get("foo").and_then(|foo| foo.get("bar")).unwrap());
-        assert_eq!("bar", s.get("foo").and_then(|foo| foo.get("baz")).unwrap());
-        assert_eq!("baz", s.get("faa").and_then(|foo| foo.get("bar")).unwrap());
-    }
-
-    #[test]
     fn test_fromstr() {
         let msg = "<1>1 1985-04-12T23:20:50.52Z host - - - -"
             .parse::<SyslogMessage>()
             .expect("Should parse empty message");
         assert_eq!(msg.timestamp, Some(482196050));
+        assert_eq!(msg.sd, BTreeMap::new());
+    }
+
+    #[test]
+    fn test_fromstr_hashmap() {
+        use std::collections::HashMap;
+
+        let msg =
+            "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [foo bar=\"baz\"] some_message"
+                .parse::<SyslogMessage<HashMap<_, _>>>()
+                .expect("Should parse simple message");
+        assert_eq!(msg.sd, {
+            let mut m = HashMap::new();
+            let mut sm = HashMap::new();
+            sm.insert("bar".to_owned(), "baz".to_owned());
+            m.insert("foo".to_owned(), sm);
+            m
+        })
+    }
+
+    #[test]
+    fn test_fromstr_hashmap_custom_hasher() {
+        use std::collections::HashMap;
+
+        let msg =
+            "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [foo bar=\"baz\"] some_message"
+                .parse::<SyslogMessage<HashMap<_, _, fxhash::FxBuildHasher>>>()
+                .expect("Should parse simple message");
+        assert_eq!(msg.sd, {
+            let mut m = HashMap::with_hasher(fxhash::FxBuildHasher::default());
+            let mut sm = HashMap::with_hasher(fxhash::FxBuildHasher::default());
+            sm.insert("bar".to_owned(), "baz".to_owned());
+            m.insert("foo".to_owned(), sm);
+            m
+        })
+    }
+
+    #[cfg(feature = "indexmap")]
+    #[test]
+    fn test_fromstr_indexmap() {
+        use indexmap::IndexMap;
+
+        let msg =
+            "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [foo bar=\"baz\"] some_message"
+                .parse::<SyslogMessage<IndexMap<_, _>>>()
+                .expect("Should parse simple message");
+        assert_eq!(msg.sd, {
+            let mut m = IndexMap::new();
+            let mut sm = IndexMap::new();
+            sm.insert("bar".to_owned(), "baz".to_owned());
+            m.insert("foo".to_owned(), sm);
+            m
+        })
+    }
+
+    #[cfg(feature = "indexmap")]
+    #[test]
+    fn test_fromstr_indexmap_custom_hasher() {
+        use fxhash::FxBuildHasher;
+        use indexmap::IndexMap;
+
+        let msg =
+            "<78>1 2016-01-15T00:04:01+00:00 host1 CROND 10391 - [foo bar=\"baz\"] some_message"
+                .parse::<SyslogMessage<IndexMap<_, _, FxBuildHasher>>>()
+                .expect("Should parse simple message");
+        assert_eq!(msg.sd, {
+            let mut m = IndexMap::with_hasher(FxBuildHasher::default());
+            let mut sm = IndexMap::with_hasher(FxBuildHasher::default());
+            sm.insert("bar".to_owned(), "baz".to_owned());
+            m.insert("foo".to_owned(), sm);
+            m
+        })
     }
 }
