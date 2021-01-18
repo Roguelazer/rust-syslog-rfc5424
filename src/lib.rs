@@ -38,6 +38,7 @@ mod facility;
 pub mod message;
 pub mod parser;
 mod severity;
+mod structured_data;
 
 pub use facility::SyslogFacility;
 pub use severity::SyslogSeverity;
