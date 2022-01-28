@@ -1,11 +1,10 @@
 use std::borrow::Cow;
+use std::convert::TryFrom;
 use std::num;
 use std::str;
 use std::str::FromStr;
-use std::string;
 
 use thiserror::Error;
-use time;
 
 use crate::facility;
 use crate::message::{ProcId, StructuredData, SyslogMessage};
@@ -30,13 +29,19 @@ pub enum ParseErr {
     #[error("unicode error: {0}")]
     BaseUnicodeError(#[from] str::Utf8Error),
     #[error("unicode error: {0}")]
-    UnicodeError(#[from] string::FromUtf8Error),
+    UnicodeError(#[from] std::string::FromUtf8Error),
     #[error("unexpected input at character {0}")]
     ExpectedTokenErr(char),
     #[error("integer conversion error: {0}")]
     IntConversionErr(#[from] num::ParseIntError),
     #[error("missing field {0}")]
     MissingField(&'static str),
+    #[error("invalid month number {0}")]
+    InvalidMonth(u8),
+    #[error("date had invalid field {0}")]
+    InvalidDate(String),
+    #[error("date had invalid UTC offset")]
+    InvalidOffset,
 }
 
 // We parse with this super-duper-dinky hand-coded recursive descent parser because we don't really
@@ -182,8 +187,8 @@ fn parse_sde(sde: &str) -> ParseResult<((String, ParsedSDParams), &str)> {
 
 fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
     let mut sd = StructuredData::new_empty();
-    if structured_data_raw.starts_with('-') {
-        return Ok((sd, &structured_data_raw[1..]));
+    if let Some(rest) = structured_data_raw.strip_prefix('-') {
+        return Ok((sd, rest));
     }
     let mut rest = structured_data_raw;
     while !rest.is_empty() {
@@ -204,8 +209,9 @@ fn parse_pri_val(pri: i32) -> ParseResult<(severity::SyslogSeverity, facility::S
     Ok((sev, fac))
 }
 
+/// Parse an i32
 fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
-    let (res, rest1) = take_while(s, |c| c >= '0' && c <= '9', max_digits);
+    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
     let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
     if res.len() < min_digits {
         Err(ParseErr::TooFewDigits)
@@ -216,6 +222,22 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
             i32::from_str(res).map_err(ParseErr::IntConversionErr)?,
             rest,
         ))
+    }
+}
+
+/// Parse an i32
+fn parse_num_generic<NT>(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(NT, &str)>
+where
+    NT: FromStr<Err = num::ParseIntError>,
+{
+    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
+    let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
+    if res.len() < min_digits {
+        Err(ParseErr::TooFewDigits)
+    } else if res.len() > max_digits {
+        Err(ParseErr::TooManyDigits)
+    } else {
+        Ok((NT::from_str(res).map_err(ParseErr::IntConversionErr)?, rest))
     }
 }
 
@@ -231,52 +253,65 @@ fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(
     })
 }
 
-fn parse_timestamp(m: &str) -> ParseResult<(Option<time::Timespec>, &str)> {
+fn parse_timestamp(m: &str) -> ParseResult<(Option<time::OffsetDateTime>, &str)> {
     let mut rest = m;
-    if rest.starts_with('-') {
-        return Ok((None, &rest[1..]));
+    if let Some(rest) = rest.strip_prefix('-') {
+        return Ok((None, rest));
     }
-    let mut tm = time::empty_tm();
-    tm.tm_year = take_item!(parse_num(rest, 4, 4), rest) - 1900;
+    let year = take_item!(parse_num(rest, 4, 4), rest);
     take_char!(rest, '-');
-    tm.tm_mon = take_item!(parse_num(rest, 2, 2), rest) - 1;
+    let month_num = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let month = time::Month::try_from(month_num).map_err(|_| ParseErr::InvalidMonth(month_num))?;
     take_char!(rest, '-');
-    tm.tm_mday = take_item!(parse_num(rest, 2, 2), rest);
+    let mday = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let date = time::Date::from_calendar_date(year, month, mday)
+        .map_err(|e| ParseErr::InvalidDate(e.name().to_string()))?;
     take_char!(rest, 'T');
-    tm.tm_hour = take_item!(parse_num(rest, 2, 2), rest);
+    let hour = take_item!(parse_num_generic(rest, 2, 2), rest);
     take_char!(rest, ':');
-    tm.tm_min = take_item!(parse_num(rest, 2, 2), rest);
+    let minute = take_item!(parse_num_generic(rest, 2, 2), rest);
     take_char!(rest, ':');
-    tm.tm_sec = take_item!(parse_num(rest, 2, 2), rest);
-    if rest.starts_with('.') {
+    let second = take_item!(parse_num_generic(rest, 2, 2), rest);
+    let nano = if rest.starts_with('.') {
         take_char!(rest, '.');
-        tm.tm_nsec = take_item!(parse_decimal(rest, 1, 6), rest);
-    }
+        take_item!(parse_decimal(rest, 1, 6), rest) as u32
+    } else {
+        0
+    };
+    let time = time::Time::from_hms_nano(hour, minute, second, nano)
+        .map_err(|e| ParseErr::InvalidDate(e.name().to_string()))?;
     // Tm::utcoff is totally broken, don't use it.
-    let utc_offset_mins = match rest.chars().next() {
-        None => 0,
+    let utc_offset = match rest.chars().next() {
+        None => None,
         Some('Z') => {
             rest = &rest[1..];
-            0
+            None
         }
         Some(c) => {
             let (sign, irest) = match c {
                 // Note: signs are backwards as per RFC3339
-                '-' => (1, &rest[1..]),
-                '+' => (-1, &rest[1..]),
+                '-' => (-1, &rest[1..]),
+                '+' => (1, &rest[1..]),
                 _ => {
                     return Err(ParseErr::InvalidUTCOffset);
                 }
             };
-            let hours = i32::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
-            let minutes = i32::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
+            let hours = i8::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
+            let minutes = i8::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
             rest = &irest[5..];
-            minutes * sign + hours * 60 * sign
+            Some(
+                time::UtcOffset::from_hms(hours * sign, minutes * sign, 0)
+                    .map_err(|_| ParseErr::InvalidOffset)?,
+            )
         }
     };
-    tm = tm + time::Duration::minutes(i64::from(utc_offset_mins));
-    tm.tm_isdst = -1;
-    Ok((Some(tm.to_utc().to_timespec()), rest))
+    let naive_dt = time::PrimitiveDateTime::new(date, time);
+    let dt = if let Some(utc_offset) = utc_offset {
+        naive_dt.assume_offset(utc_offset)
+    } else {
+        naive_dt.assume_utc()
+    };
+    Ok((Some(dt), rest))
 }
 
 fn parse_term(
@@ -318,14 +353,10 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
     take_char!(rest, ' ');
     let appname = take_item!(parse_term(rest, 1, 48), rest);
     take_char!(rest, ' ');
-    let procid_r = take_item!(parse_term(rest, 1, 128), rest);
-    let procid = match procid_r {
-        None => None,
-        Some(s) => Some(match i32::from_str(&s) {
-            Ok(n) => ProcId::PID(n),
-            Err(_) => ProcId::Name(s),
-        }),
-    };
+    let procid = take_item!(parse_term(rest, 1, 128), rest).map(|s| match i32::from_str(&s) {
+        Ok(n) => ProcId::PID(n),
+        Err(_) => ProcId::Name(s),
+    });
     take_char!(rest, ' ');
     let msgid = take_item!(parse_term(rest, 1, 32), rest);
     take_char!(rest, ' ');
@@ -340,8 +371,8 @@ fn parse_message_s(m: &str) -> ParseResult<SyslogMessage> {
         severity: sev,
         facility: fac,
         version,
-        timestamp: event_time.map(|t| t.sec),
-        timestamp_nanos: event_time.map(|t| t.nsec),
+        timestamp: event_time.map(|t| t.unix_timestamp()),
+        timestamp_nanos: event_time.map(|t| t.time().nanosecond()),
         hostname,
         appname,
         procid,

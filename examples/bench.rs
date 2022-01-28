@@ -1,8 +1,5 @@
 #[macro_use]
 extern crate timeit;
-extern crate syslog_rfc5424;
-#[cfg(feature = "serde-serialize")]
-extern crate serde_json;
 
 use syslog_rfc5424::parse_message;
 
@@ -46,6 +43,6 @@ fn main() {
     timeit!({
         parse_message(average_message).unwrap();
     });
-    #[cfg(feature="serde-serialize")]
+    #[cfg(feature = "serde-serialize")]
     bench_serde();
 }

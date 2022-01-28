@@ -91,12 +91,7 @@ impl StructuredData {
     }
 
     /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
-    pub fn insert_tuple<SI, SPI, SPV>(
-        &mut self,
-        sd_id: SI,
-        sd_param_id: SPI,
-        sd_param_value: SPV,
-    ) -> ()
+    pub fn insert_tuple<SI, SPI, SPV>(&mut self, sd_id: SI, sd_param_id: SPI, sd_param_value: SPV)
     where
         SI: Into<SDIDType>,
         SPI: Into<SDParamIDType>,
@@ -151,7 +146,7 @@ pub struct SyslogMessage {
     pub facility: facility::SyslogFacility,
     pub version: i32,
     pub timestamp: Option<time_t>,
-    pub timestamp_nanos: Option<i32>,
+    pub timestamp_nanos: Option<u32>,
     pub hostname: Option<String>,
     pub appname: Option<String>,
     pub procid: Option<ProcId>,

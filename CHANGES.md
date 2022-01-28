@@ -1,3 +1,8 @@
+NEXT
+------------------
+- Upgrade `time` dependency to 0.3 to resolve cargo audits
+- Switch from Travis-CI to Github Actions for CI
+
 0.7.0 (2020-09-24)
 ------------------
 - Bump to Rust 2018 edition
