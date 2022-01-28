@@ -1,4 +1,4 @@
-NEXT
+0.8.0 (2022-01-28)
 ------------------
 - Upgrade `time` dependency to 0.3 to resolve cargo audits
 - Switch from Travis-CI to Github Actions for CI
