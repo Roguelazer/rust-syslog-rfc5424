@@ -11,20 +11,16 @@ readme = "README.md"
 edition = "2018"
 
 [dependencies]
-time = "^0.1"
-serde = { version = "1.0", optional = true }
-serde_derive = { version = "1.0", optional = true }
+time = "0.3"
+serde = { version = "1.0", optional = true, features=["derive"] }
 serde_json = { version = "1.0", optional = true }
 thiserror = "1.0"
 
 [dev-dependencies]
-timeit = "0.1"
+timeit = { version = "0.1", git = "ssh://git@github.com/Roguelazer/timeit", rev = "9e9f2e1b9ab9537a72fc4e59ccfc1e89b5b51239" }
 
 [features]
-serde-serialize = ["serde", "serde_derive", "serde_json"]
-
-[badges]
-travis-ci = { repository = "Roguelazer/rust-syslog-rfc5424" }
+serde-serialize = ["serde", "serde_json"]
 
 [package.metadata.docs.rs]
 all-features = true

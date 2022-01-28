@@ -30,10 +30,6 @@
 //!    message. Rust doesn't have a convenient way to only treat *some* of a buffer as utf-8,
 //!    so I'm just not supporting that. Most "real" syslog servers barf on it anway.
 //!
-#[cfg(feature = "serde-serialize")]
-#[macro_use]
-extern crate serde_derive;
-
 mod facility;
 pub mod message;
 pub mod parser;
