@@ -17,7 +17,7 @@ serde_json = { version = "1.0", optional = true }
 thiserror = "1.0"
 
 [dev-dependencies]
-timeit = { version = "0.1", git = "ssh://git@github.com/Roguelazer/timeit", rev = "9e9f2e1b9ab9537a72fc4e59ccfc1e89b5b51239" }
+timeit = { version = "0.1", git = "https://github.com/Roguelazer/timeit", rev = "9e9f2e1b9ab9537a72fc4e59ccfc1e89b5b51239" }
 
 [features]
 serde-serialize = ["serde", "serde_json"]
