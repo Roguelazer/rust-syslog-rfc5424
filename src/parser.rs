@@ -3,10 +3,8 @@ use std::convert::TryFrom;
 use std::num;
 use std::str;
 use std::str::FromStr;
-use std::string;
 
 use thiserror::Error;
-use time;
 
 use crate::facility;
 use crate::message::{ProcId, StructuredData, SyslogMessage};
@@ -31,7 +29,7 @@ pub enum ParseErr {
     #[error("unicode error: {0}")]
     BaseUnicodeError(#[from] str::Utf8Error),
     #[error("unicode error: {0}")]
-    UnicodeError(#[from] string::FromUtf8Error),
+    UnicodeError(#[from] std::string::FromUtf8Error),
     #[error("unexpected input at character {0}")]
     ExpectedTokenErr(char),
     #[error("integer conversion error: {0}")]
@@ -230,7 +228,7 @@ fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32,
 /// Parse an i32
 fn parse_num_generic<NT>(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(NT, &str)>
 where
-    NT: std::str::FromStr<Err = std::num::ParseIntError>,
+    NT: FromStr<Err = num::ParseIntError>,
 {
     let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
     let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
