@@ -1,6 +1,6 @@
 This module implements an [RFC 5424](https://tools.ietf.org/html/rfc5424) IETF Syslog Protocol parser in Rust.
 
-![CI](https://github.com/Roguelazer/rust-syslog-rfc5424/workflows/CI/badge.svg?branch=master)
+[![CI](https://github.com/Roguelazer/rust-syslog-rfc5424/workflows/CI/badge.svg?branch=master)](https://github.com/Roguelazer/rust-syslog-rfc5424/actions/workflows/ci.yml)
 [![Documentation](https://docs.rs/syslog_rfc5424/badge.svg)](https://docs.rs/syslog_rfc5424)
 [![crates.io](https://img.shields.io/crates/v/syslog_rfc5424.svg)](https://crates.io/crates/syslog_rfc5424)
 
