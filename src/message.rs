@@ -90,6 +90,16 @@ impl StructuredData {
         }
     }
 
+    /// Fetch or insert a new sd_id entry into the StructuredData
+    pub fn entry<SI>(&mut self, sd_id: SI) -> &mut BTreeMap<String, String>
+    where
+        SI: Into<SDIDType>,
+    {
+        self.elements
+            .entry(sd_id.into())
+            .or_insert_with(BTreeMap::new)
+    }
+
     /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
     pub fn insert_tuple<SI, SPI, SPV>(&mut self, sd_id: SI, sd_param_id: SPI, sd_param_value: SPV)
     where
@@ -97,11 +107,8 @@ impl StructuredData {
         SPI: Into<SDParamIDType>,
         SPV: Into<SDParamValueType>,
     {
-        let sub_map = self
-            .elements
-            .entry(sd_id.into())
-            .or_insert_with(BTreeMap::new);
-        sub_map.insert(sd_param_id.into(), sd_param_value.into());
+        self.entry(sd_id)
+            .insert(sd_param_id.into(), sd_param_value.into());
     }
 
     /// Lookup by SDID, SDParamID pair

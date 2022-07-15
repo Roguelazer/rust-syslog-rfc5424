@@ -193,8 +193,9 @@ fn parse_sd(structured_data_raw: &str) -> ParseResult<(StructuredData, &str)> {
     let mut rest = structured_data_raw;
     while !rest.is_empty() {
         let (sd_id, params) = take_item!(parse_sde(rest), rest);
+        let sub_map = sd.entry(sd_id.clone());
         for (sd_param_id, sd_param_value) in params {
-            sd.insert_tuple(sd_id.clone(), sd_param_id, sd_param_value);
+            sub_map.insert(sd_param_id, sd_param_value);
         }
         if rest.starts_with(' ') {
             break;
@@ -478,6 +479,29 @@ mod tests {
             .find_tuple("meta", "sequenceId")
             .expect("Should contain meta sequenceId");
         assert_eq!(v, "29");
+    }
+
+    #[test]
+    fn test_sd_empty() {
+        let msg = parse_message(
+            "<78>1 2016-01-15T00:04:01Z host1 CROND 10391 - [meta@1234] some_message",
+        )
+        .expect("Should parse message with empty structured data");
+        assert_eq!(msg.facility, SyslogFacility::LOG_CRON);
+        assert_eq!(msg.severity, SyslogSeverity::SEV_INFO);
+        assert_eq!(msg.hostname, Some(String::from("host1")));
+        assert_eq!(msg.appname, Some(String::from("CROND")));
+        assert_eq!(msg.procid, Some(message::ProcId::PID(10391)));
+        assert_eq!(msg.msg, String::from("some_message"));
+        assert_eq!(msg.timestamp, Some(1452816241));
+        assert_eq!(msg.sd.len(), 1);
+        assert_eq!(
+            msg.sd
+                .find_sdid("meta@1234")
+                .expect("should contain meta")
+                .len(),
+            0
+        );
     }
 
     #[test]
