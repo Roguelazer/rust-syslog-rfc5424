@@ -1,3 +1,7 @@
+0.9.0 (2022-07-15)
+------------------
+- Allow inserting empty structured data through the `.entry()` method on StructuredData (@thijsc, #22)
+
 0.8.0 (2022-01-28)
 ------------------
 - Upgrade `time` dependency to 0.3 to resolve cargo audits
