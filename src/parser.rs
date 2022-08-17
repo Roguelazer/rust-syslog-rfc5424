@@ -242,7 +242,8 @@ where
     }
 }
 
-fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
+/// Parse a fraction and return it as a value in nanoseconds
+fn parse_fraction(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
     parse_num(d, min_digits, max_digits).map(|(val, s)| {
         let mut multiplicand = 1;
         let z = 10 - (d.len() - s.len());
@@ -275,7 +276,7 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::OffsetDateTime>, &str)>
     let second = take_item!(parse_num_generic(rest, 2, 2), rest);
     let nano = if rest.starts_with('.') {
         take_char!(rest, '.');
-        take_item!(parse_decimal(rest, 1, 6), rest) as u32
+        take_item!(parse_fraction(rest, 1, 6), rest) as u32
     } else {
         0
     };
