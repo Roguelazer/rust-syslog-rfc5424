@@ -31,8 +31,8 @@ pub enum ProcId {
 impl PartialOrd for ProcId {
     fn partial_cmp(&self, other: &ProcId) -> Option<Ordering> {
         match (self, other) {
-            (&ProcId::PID(ref s_p), &ProcId::PID(ref o_p)) => Some(s_p.cmp(o_p)),
-            (&ProcId::Name(ref s_n), &ProcId::Name(ref o_n)) => Some(s_n.cmp(o_n)),
+            (ProcId::PID(s_p), ProcId::PID(o_p)) => Some(s_p.cmp(o_p)),
+            (ProcId::Name(s_n), ProcId::Name(o_n)) => Some(s_n.cmp(o_n)),
             _ => None,
         }
     }
@@ -95,9 +95,7 @@ impl StructuredData {
     where
         SI: Into<SDIDType>,
     {
-        self.elements
-            .entry(sd_id.into())
-            .or_insert_with(BTreeMap::new)
+        self.elements.entry(sd_id.into()).or_default()
     }
 
     /// Insert a new (sd_id, sd_param_id) -> sd_value mapping into the StructuredData
@@ -227,8 +225,10 @@ mod tests {
         let encoded = serde_json::to_string(&m).expect("Should encode to JSON");
         // XXX: we don't have a guaranteed order, I don't think, so this might break with minor
         // version changes. *shrug*
-        assert_eq!(encoded,
-                   "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"timestamp_nanos\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}");
+        assert_eq!(
+            encoded,
+            "{\"severity\":\"info\",\"facility\":\"kern\",\"version\":1,\"timestamp\":null,\"timestamp_nanos\":null,\"hostname\":null,\"appname\":null,\"procid\":null,\"msgid\":null,\"sd\":{},\"msg\":\"\"}"
+        );
     }
 
     #[test]

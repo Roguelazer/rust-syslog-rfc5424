@@ -162,17 +162,16 @@ fn parse_sd_params(input: &str) -> ParseResult<(ParsedSDParams, &str)> {
     let mut params = Vec::new();
     let mut top = input;
     loop {
-        if let Some(rest2) = maybe_expect_char!(top, ' ') {
-            let mut rest = rest2;
-            let param_name = take_item!(parse_sd_id(rest), rest);
-            take_char!(rest, '=');
-            let param_value = take_item!(parse_param_value(rest), rest);
-            // is there an uglier modifier than &*
-            params.push((param_name, String::from(&*param_value)));
-            top = rest;
-        } else {
+        let Some(rest2) = maybe_expect_char!(top, ' ') else {
             return Ok((params, top));
-        }
+        };
+        let mut rest = rest2;
+        let param_name = take_item!(parse_sd_id(rest), rest);
+        take_char!(rest, '=');
+        let param_value = take_item!(parse_param_value(rest), rest);
+        // is there an uglier modifier than &*
+        params.push((param_name, String::from(&*param_value)));
+        top = rest;
     }
 }
 
@@ -212,7 +211,7 @@ fn parse_pri_val(pri: i32) -> ParseResult<(severity::SyslogSeverity, facility::S
 
 /// Parse an i32
 fn parse_num(s: &str, min_digits: usize, max_digits: usize) -> ParseResult<(i32, &str)> {
-    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
+    let (res, rest1) = take_while(s, |c| c.is_ascii_digit(), max_digits);
     let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
     if res.len() < min_digits {
         Err(ParseErr::TooFewDigits)
@@ -231,7 +230,7 @@ fn parse_num_generic<NT>(s: &str, min_digits: usize, max_digits: usize) -> Parse
 where
     NT: FromStr<Err = num::ParseIntError>,
 {
-    let (res, rest1) = take_while(s, |c| ('0'..='9').contains(&c), max_digits);
+    let (res, rest1) = take_while(s, |c| c.is_ascii_digit(), max_digits);
     let rest = rest1.ok_or(ParseErr::UnexpectedEndOfInput)?;
     if res.len() < min_digits {
         Err(ParseErr::TooFewDigits)
@@ -412,7 +411,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::mem;
 
-    use super::{parse_message, ParseErr};
+    use super::{ParseErr, parse_message};
     use crate::message;
 
     use crate::facility::SyslogFacility;
@@ -428,7 +427,7 @@ mod tests {
         assert!(msg.appname.is_none());
         assert!(msg.procid.is_none());
         assert!(msg.msgid.is_none());
-        assert!(msg.sd.len() == 0);
+        assert!(msg.sd.is_empty());
     }
 
     #[test]
