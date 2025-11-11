@@ -1,3 +1,8 @@
+0.10.0 (2025-11-11)
+-------------------
+- Bump to Edition 2024 and MSRV 1.85
+- Rename primary branch from `master` to `main`
+
 0.9.1 (2025-11-11)
 ------------------
 - Allow input timestamps to have 9 digits of fractional precision, even though RFC 5424 says 6 (@cbeck88, #26)
