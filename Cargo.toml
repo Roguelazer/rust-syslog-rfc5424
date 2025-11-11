@@ -1,6 +1,6 @@
 [package]
 name = "syslog_rfc5424"
-version = "0.9.1"
+version = "0.10.0"
 authors = ["James Brown <roguelazer@roguelazer.com>"]
 description = "Parser for RFC5424 (IETF-format) syslog messages"
 documentation = "https://docs.rs/syslog_rfc5424/"
@@ -9,6 +9,7 @@ repository = "https://github.com/Roguelazer/rust-syslog-rfc5424"
 license = "ISC"
 readme = "README.md"
 edition = "2024"
+rust-version = "1.85"
 
 [dependencies]
 time = "0.3"
