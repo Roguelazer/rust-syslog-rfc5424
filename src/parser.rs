@@ -587,6 +587,10 @@ mod tests {
             .unwrap();
         assert_eq!(msg.timestamp, Some(1061676855));
         assert_eq!(msg.timestamp_nanos, Some(123456789));
+
+        // 10 decimals of precision is an error
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.1122334455+07:00 host - - - -");
+        assert!(msg.is_err());
     }
 
     #[test]
