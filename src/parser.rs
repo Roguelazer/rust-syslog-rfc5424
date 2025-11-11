@@ -578,13 +578,11 @@ mod tests {
         assert_eq!(msg.timestamp_nanos, Some(3000));
 
         // Nanosecond precision is permitted
-        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003+07:00 host - - - -")
-            .unwrap();
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003+07:00 host - - - -").unwrap();
         assert_eq!(msg.timestamp, Some(1061676855));
         assert_eq!(msg.timestamp_nanos, Some(3));
 
-        let msg = parse_message("<1>1 2003-08-24T05:14:15.123456789+07:00 host - - - -")
-            .unwrap();
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.123456789+07:00 host - - - -").unwrap();
         assert_eq!(msg.timestamp, Some(1061676855));
         assert_eq!(msg.timestamp_nanos, Some(123456789));
 
