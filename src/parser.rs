@@ -117,7 +117,7 @@ fn parse_sd_id(input: &str) -> ParseResult<(String, &str)> {
 }
 
 /** Parse a `param_value`... a.k.a. a quoted string */
-fn parse_param_value(input: &str) -> ParseResult<(Cow<str>, &str)> {
+fn parse_param_value(input: &'_ str) -> ParseResult<(Cow<'_, str>, &'_ str)> {
     let mut rest = input;
     take_char!(rest, '"');
     // Can't do a 0-copy &str slice here because we need to un-escape escaped quotes
