@@ -8,7 +8,7 @@ homepage = "https://github.com/Roguelazer/rust-syslog-rfc5424"
 repository = "https://github.com/Roguelazer/rust-syslog-rfc5424"
 license = "ISC"
 readme = "README.md"
-edition = "2018"
+edition = "2024"
 
 [dependencies]
 time = "0.3"
