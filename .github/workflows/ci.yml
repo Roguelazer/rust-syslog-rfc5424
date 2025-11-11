@@ -1,50 +1,54 @@
 name: CI
-
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-
 env:
   CARGO_TERM_COLOR: always
-
 jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: pre-commit/action@v3.0.1
   style:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        components: rustfmt,clippy
-        toolchain: 1.91.1
-    - uses: Swatinem/rust-cache@v2
-    - name: cargo fmt
-      run: cargo fmt --all -- --check
-    - name: cargo clippy
-      run: cargo clippy -- -D warnings
+      - name: Checkout
+        uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt,clippy
+          toolchain: 1.91.1
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy -- -D warnings
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         rust: ["1.85.0", stable, beta]
     steps:
-    - uses: actions/checkout@v5
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: ${{ matrix.rust }}
-    - uses: Swatinem/rust-cache@v2
-    - name: Test
-      run: cargo test --all-features
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --all-features
   audit:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
-    - uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: stable
-    - uses: taiki-e/install-action@v2
-      with:
-        tool: cargo-audit
-    - run: cargo audit
-
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
