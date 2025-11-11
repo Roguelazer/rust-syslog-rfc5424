@@ -1,3 +1,9 @@
+0.9.1 (2025-11-11)
+------------------
+- Allow input timestamps to have 9 digits of fractional precision, even though RFC 5424 says 6 (@cbeck88, #26)
+- Fix warning in `parse_param_value` on newer rustc versions
+- Add dependabot
+
 0.9.0 (2022-07-15)
 ------------------
 - Allow inserting empty structured data through the `.entry()` method on StructuredData (@thijsc, #22)
