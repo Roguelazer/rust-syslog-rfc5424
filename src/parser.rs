@@ -275,7 +275,8 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::OffsetDateTime>, &str)>
     let second = take_item!(parse_num_generic(rest, 2, 2), rest);
     let nano = if rest.starts_with('.') {
         take_char!(rest, '.');
-        take_item!(parse_decimal(rest, 1, 6), rest) as u32
+        // Note: RFC states 6 decimals, but here we allow nanosecond precision.
+        take_item!(parse_decimal(rest, 1, 9), rest) as u32
     } else {
         0
     };
@@ -576,8 +577,18 @@ mod tests {
         assert_eq!(msg.timestamp, Some(1061676855));
         assert_eq!(msg.timestamp_nanos, Some(3000));
 
-        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003+07:00 host - - - -");
-        assert!(msg.is_err(), "expected parse fail");
+        // Nanosecond precision is permitted
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.000000003+07:00 host - - - -").unwrap();
+        assert_eq!(msg.timestamp, Some(1061676855));
+        assert_eq!(msg.timestamp_nanos, Some(3));
+
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.123456789+07:00 host - - - -").unwrap();
+        assert_eq!(msg.timestamp, Some(1061676855));
+        assert_eq!(msg.timestamp_nanos, Some(123456789));
+
+        // 10 decimals of precision is an error
+        let msg = parse_message("<1>1 2003-08-24T05:14:15.1122334455+07:00 host - - - -");
+        assert!(msg.is_err());
     }
 
     #[test]
