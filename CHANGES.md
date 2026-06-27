@@ -1,3 +1,7 @@
+Upcoming
+--------
+- Bump MSRV to 1.88 so we can get the `time` fixes
+
 0.10.0 (2025-11-11)
 -------------------
 - Bump to Edition 2024 and MSRV 1.85
