@@ -1,4 +1,4 @@
-Upcoming
+0.11.0 (2026-11-05)
 --------
 - Bump MSRV to 1.88 so we can get the `time` fixes
 - **(SECURITY)** Fix a panic if parsing zone offsets containing multibyte characters; thanks Hsuan-Hao Hsu (許軒豪)
