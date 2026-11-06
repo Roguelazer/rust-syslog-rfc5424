@@ -253,6 +253,39 @@ fn parse_decimal(d: &str, min_digits: usize, max_digits: usize) -> ParseResult<(
     })
 }
 
+fn parse_two_digit_i8(d: &str) -> ParseResult<(i8, &str)> {
+    if d.chars().take(2).all(|c| c.is_ascii_digit()) {
+        let (digits, rest) = d.split_at(2);
+        Ok((digits.parse().map_err(ParseErr::IntConversionErr)?, rest))
+    } else {
+        Err(ParseErr::UnexpectedEndOfInput)
+    }
+}
+
+// parse a zone offset like -08:00 or +23:15
+fn parse_zone_offset(first: char, s: &str) -> ParseResult<(time::UtcOffset, &str)> {
+    let sign = match first {
+        // Note: signs are backwards as per RFC3339
+        '-' => -1,
+        '+' => 1,
+        _ => return Err(ParseErr::InvalidUTCOffset),
+    };
+    let rest = &s[1..];
+    let (hours, rest) = parse_two_digit_i8(rest)?;
+    if hours > 23 {
+        // technically offsets only go from -12 to +14, but at least we can rule out the definitely
+        // nonsensical ones
+        return Err(ParseErr::InvalidUTCOffset);
+    }
+    let Some(rest) = rest.strip_prefix(':') else {
+        return Err(ParseErr::InvalidUTCOffset);
+    };
+    let (minutes, rest) = parse_two_digit_i8(rest)?;
+    let offset = time::UtcOffset::from_hms(hours * sign, minutes * sign, 0)
+        .map_err(|_| ParseErr::InvalidOffset)?;
+    Ok((offset, rest))
+}
+
 fn parse_timestamp(m: &str) -> ParseResult<(Option<time::OffsetDateTime>, &str)> {
     let mut rest = m;
     if let Some(rest) = rest.strip_prefix('-') {
@@ -289,21 +322,9 @@ fn parse_timestamp(m: &str) -> ParseResult<(Option<time::OffsetDateTime>, &str)>
             None
         }
         Some(c) => {
-            let (sign, irest) = match c {
-                // Note: signs are backwards as per RFC3339
-                '-' => (-1, &rest[1..]),
-                '+' => (1, &rest[1..]),
-                _ => {
-                    return Err(ParseErr::InvalidUTCOffset);
-                }
-            };
-            let hours = i8::from_str(&irest[0..2]).map_err(ParseErr::IntConversionErr)?;
-            let minutes = i8::from_str(&irest[3..5]).map_err(ParseErr::IntConversionErr)?;
-            rest = &irest[5..];
-            Some(
-                time::UtcOffset::from_hms(hours * sign, minutes * sign, 0)
-                    .map_err(|_| ParseErr::InvalidOffset)?,
-            )
+            let (zone, irest) = parse_zone_offset(c, rest).map_err(|_| ParseErr::InvalidOffset)?;
+            rest = irest;
+            Some(zone)
         }
     };
     let naive_dt = time::PrimitiveDateTime::new(date, time);
@@ -320,7 +341,7 @@ fn parse_term(
     min_length: usize,
     max_length: usize,
 ) -> ParseResult<(Option<String>, &str)> {
-    if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == 0x20) {
+    if m.starts_with('-') && (m.len() <= 1 || m.as_bytes()[1] == b' ') {
         return Ok((None, &m[1..]));
     }
     let byte_ary = m.as_bytes();
@@ -409,7 +430,8 @@ pub fn parse_message<S: AsRef<str>>(s: S) -> ParseResult<SyslogMessage> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::mem;
+
+    use assert_matches::assert_matches;
 
     use super::{ParseErr, parse_message};
     use crate::message;
@@ -642,9 +664,31 @@ mod tests {
     fn test_truncated() {
         let err =
             parse_message("<39>1 2018-05-15T20:56:58+00:00 -web1west -").expect_err("should fail");
-        assert_eq!(
-            mem::discriminant(&err),
-            mem::discriminant(&ParseErr::UnexpectedEndOfInput)
-        );
+        assert_matches!(err, ParseErr::UnexpectedEndOfInput);
+    }
+
+    #[test]
+    fn test_multibyte_offset_does_not_panic() {
+        let err =
+            parse_message("<39>1 2018-05-15T20:56:58+0¶:00 -web1west -").expect_err("should fail");
+        assert_matches!(err, ParseErr::InvalidOffset);
+        let err =
+            parse_message("<39>1 2018-05-15T20:56:58+02:0¶ -web1west -").expect_err("should fail");
+        assert_matches!(err, ParseErr::InvalidOffset);
+        let err =
+            parse_message("<39>1 2018-05-15T20:56:58+02¶00 -web1west -").expect_err("should fail");
+        assert_matches!(err, ParseErr::InvalidOffset);
+    }
+
+    #[test]
+    fn test_rejects_other_garbage_offsets() {
+        let res = parse_message("<1>1 2026-11-05T21:30:00.00+00-00 host - - - -");
+        assert_matches!(res, Err(ParseErr::InvalidOffset));
+        let res = parse_message("<1>1 2026-11-05T21:30:00.00+24:00 host - - - -");
+        assert_matches!(res, Err(ParseErr::InvalidOffset));
+        let res = parse_message("<1>1 2026-11-05T21:30:00.00-99:00 host - - - -");
+        assert_matches!(res, Err(ParseErr::InvalidOffset));
+        let res = parse_message("<1>1 2026-11-05T21:30:00.00-zz:00 host - - - -");
+        assert_matches!(res, Err(ParseErr::InvalidOffset));
     }
 }
